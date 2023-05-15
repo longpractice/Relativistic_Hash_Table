@@ -68,7 +68,7 @@ namespace yj
     void rcuInitZone(RCUZone& zone)
     {
         uint32_t nrHardwareConcurrency = std::thread::hardware_concurrency();
-        rcuInitZoneWithBucketCounts(zone, nrHardwareConcurrency * 64);
+        rcuInitZoneWithBucketCounts(zone, nrHardwareConcurrency * c_nrRCUBucketsPerHardwareThread);
     }
 
     void rcuReleaseZone(RCUZone& zone)
