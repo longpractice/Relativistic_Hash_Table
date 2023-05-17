@@ -4,8 +4,8 @@ namespace yj
 {
     namespace rcuHashTableDetail
     {
-        void expandBucketsByFac2(RcuHashTable& table);
-        void shrinkBucketsByFac2(RcuHashTable& table);
+        void expandBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RcuHashTable& table);
+        bool shrinkBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RcuHashTable& table);
     }
 
     //--------------------------Advanced API-------------------------------------------------//
@@ -26,15 +26,7 @@ namespace yj
                 pLast->next.store(pNext, std::memory_order_release);
                 auto oldSize = table.size.fetch_add(-1, std::memory_order_relaxed);
                 //shrinking happens much less often
-                if (pBucketsInfo->nrBucketsPowerOf2 >= 128 && oldSize * 8 <= pBucketsInfo->nrBucketsPowerOf2)
-                {
-                    rcuHashTableDetail::shrinkBucketsByFac2(table);
-                    outIfAlreadyRcuSynrhonized = true;
-                }
-                else
-                {
-                    outIfAlreadyRcuSynrhonized = false;
-                }
+                outIfAlreadyRcuSynrhonized = rcuHashTableDetail::shrinkBucketsByFac2IfNecessary(oldSize, pBucketsInfo->nrBucketsPowerOf2, table);
                 return pEntry;
             }
             pLast = p;
@@ -62,6 +54,24 @@ namespace yj
     //returns the epoch to be passed into the rcuHashTableReadUnlock
     int64_t rcuHashTableReadLock(RcuHashTable& table);
     void rcuHashTableReadUnlock(RcuHashTable& table, int64_t epoch);
+    struct RcuHashTableReadLockGuard
+    {
+        explicit RcuHashTableReadLockGuard(RcuHashTable& table) :tbl{ table }
+        {
+            epoch = rcuHashTableReadLock(table);
+        }
+        RcuHashTableReadLockGuard(const RcuHashTableReadLockGuard&) = delete;
+        RcuHashTableReadLockGuard(RcuHashTableReadLockGuard&&) = delete;
+        RcuHashTableReadLockGuard& operator=(const RcuHashTableReadLockGuard&) = delete;
+        RcuHashTableReadLockGuard& operator=(RcuHashTableReadLockGuard&&) = delete;
+
+        ~RcuHashTableReadLockGuard()
+        {
+            rcuHashTableReadUnlock(tbl, epoch);
+        }
+        RcuHashTable& tbl;
+        int64_t epoch = 0;
+    };
     //Read operation
     //\parameter hashVal should be the hash value of the find target, only table entries with a hash value equals to `hashVal` is checked for
     // equality with matchOp.
@@ -107,8 +117,7 @@ namespace yj
         pEntry->head.next.store(pFirst, std::memory_order_release);
         pBucket->list.next.store(&pEntry->head, std::memory_order_release);
         auto oldSize = table.size.fetch_add(1, std::memory_order_relaxed);
-        if (pBucketsInfo->nrBucketsPowerOf2 <= oldSize)
-            rcuHashTableDetail::expandBucketsByFac2(table);
+        rcuHashTableDetail::expandBucketsByFac2IfNecessary(oldSize, pBucketsInfo->nrBucketsPowerOf2, table);
         return true;
     }
 

@@ -29,7 +29,14 @@ namespace yj
             Bucket* pBuckets;
         };
 
+        //expand when element/buckets-count grows over this factor
+        float expandFactor = 256.f;
+        //shrink when element/buckets-count is less than this factor
+        float shrinkFactor = 8.f;
+
         RCUZone rcuZone;
-        std::atomic<BucketsInfo*> pBucketsInfo;
+        std::atomic<BucketsInfo*> pBucketsInfo = nullptr;
+
+        ~RcuHashTable();
     };
 }

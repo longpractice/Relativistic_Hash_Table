@@ -76,6 +76,7 @@ namespace yj
         const size_t nrBucketsOneEpoch = nrBucketsPerEpoch(zone);
         const size_t nrTotalRefCounts = nrBucketsOneEpoch * c_maxEpoches;
         delete[](zone.epochsRing[0].pBuckets);
+        zone.epochsRing[0].pBuckets = nullptr;
     }
 
     namespace
@@ -135,5 +136,11 @@ namespace yj
                 while (zone.epochsRing[epochRowId].pBuckets[iBucket].count.load(std::memory_order_acquire) > 0)
                     continue;
         }
+    }
+
+    RCUZone::~RCUZone()
+    {
+        if (epochsRing[0].pBuckets)
+            rcuReleaseZone(*this);
     }
 }

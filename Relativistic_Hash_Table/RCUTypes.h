@@ -31,5 +31,7 @@ namespace yj
         EpochBuckets epochsRing[c_maxEpoches];
         std::atomic<int64_t> epochLatest = 0;
         int64_t epochOldest = 0;
+
+        ~RCUZone();
     };
 }
