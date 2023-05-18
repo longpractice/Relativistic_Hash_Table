@@ -23,12 +23,14 @@
     <ClInclude Include="LibSource\include\RCUHashTableApi.h" />
     <ClInclude Include="LibSource\include\RCUHashTableTypes.h" />
     <ClInclude Include="LibSource\include\RCUTypes.h" />
+    <ClInclude Include="TestsAndExamples\RCUTableTests.h" />
     <ClInclude Include="TestsAndExamples\RCUTests.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LibSource\RCU.cpp" />
     <ClCompile Include="LibSource\RCUHashTable.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="TestsAndExamples\RCUTableTests.cpp" />
     <ClCompile Include="TestsAndExamples\RCUTests.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -119,6 +121,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Users\dd\source\repos\Relativistic_Hash_Table\Relativistic_Hash_Table\LibSource\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -134,6 +137,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Users\dd\source\repos\Relativistic_Hash_Table\Relativistic_Hash_Table\LibSource\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

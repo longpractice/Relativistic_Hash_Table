@@ -4,8 +4,8 @@
 #include <random>
 #include <shared_mutex>
 #include <memory>
-#include "RCUTypes.h"
-#include "RCUApi.h"
+#include "../LibSource/include/RCUTypes.h"
+#include "../LibSource/include/RCUApi.h"
 
 namespace yj
 {

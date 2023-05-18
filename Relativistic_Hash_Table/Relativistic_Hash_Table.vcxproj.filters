@@ -39,6 +39,9 @@
     <ClInclude Include="TestsAndExamples\RCUTests.h">
       <Filter>Source Files\TestsAndExamples</Filter>
     </ClInclude>
+    <ClInclude Include="TestsAndExamples\RCUTableTests.h">
+      <Filter>Source Files\TestsAndExamples</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LibSource\RCU.cpp">
@@ -52,6 +55,9 @@
     </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TestsAndExamples\RCUTableTests.cpp">
+      <Filter>Source Files\TestsAndExamples</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

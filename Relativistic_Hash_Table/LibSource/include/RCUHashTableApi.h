@@ -1,5 +1,6 @@
 #pragma once
 #include "RCUHashTableTypes.h"
+#include "RCUApi.h"
 namespace yj
 {
     namespace rcuHashTableDetail
@@ -7,8 +8,10 @@ namespace yj
         void expandBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RcuHashTable& table);
         bool shrinkBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RcuHashTable& table);
     }
-
+    
+    ///////////////////////////////////////////////////////////////////////////////////////////
     //--------------------------Advanced API-------------------------------------------------//
+    ///////////////////////////////////////////////////////////////////////////////////////////
     template<typename Op>
     RcuHashTableEntry* rcuHashTableTryDetach(RcuHashTable& table, size_t hashVal, Op matchOp, bool& outIfAlreadyRcuSynrhonized)
     {
@@ -34,17 +37,20 @@ namespace yj
         }
         return nullptr;
     }
+    
     //it is allowed to have multiple detach before a single synchronize operation
-    //and after the synrhonize operation, the detached nodes can be safely freed.
+    //and after the synchronize operation, the detached nodes can be safely freed.
     void rcuHashTableSynchronize(RcuHashTable& table);
+    
     //can only be called if the user is sure that no dup exists
     void rcuHashTableInsert(RcuHashTable& table, RcuHashTableEntry* pEntry);
     void rcuHashTableInitWithRcuBucketsCount(RcuHashTable& table, int nrBuckets, int nrRcuBucketsForUnregisteredThreads);
     //-----------------------------------------------------------------------------------------------//
 
 
-
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
     //--------------------------------Basic API------------------------------------------------------//
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
     //hash table must be initialized, nrBuckets is advised to be bigger than the predicted element count
     void rcuHashTableInit(RcuHashTable& table, int nrBuckets = 64);
 

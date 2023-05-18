@@ -1,7 +1,8 @@
-#include "RCUApi.h"
-#include "RCUTypes.h"
-#include "RCUHashTableApi.h"
-#include "RCUHashTableTypes.h"
+#include "include/RCUApi.h"
+#include "include/RCUApi.h"
+#include "include/RCUTypes.h"
+#include "include/RCUHashTableApi.h"
+#include "include/RCUHashTableTypes.h"
 #include <thread>
 #include <cassert>
 
