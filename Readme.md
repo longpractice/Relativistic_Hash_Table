@@ -1,11 +1,14 @@
 
+Welcome to use, comment, report bugs and contribute to this new library, I will usually reply within 3 days! I will also constantly add more and more tests to make this multi-threading lib reliable.
+
 
 Implements a relativistic hash table ( `RcuHashTable` ) using epoch-based-RCU in C++.
 
 Paper defining relativistic hash table:
 
 ```
-Triplett J, McKenney P E, Walpole J. Scalable concurrent hash tables via relativistic programming[J]. ACM SIGOPS Operating Systems Review, 2010, 44(3): 102-109.
+Triplett J, McKenney P E, Walpole J. Scalable concurrent hash tables via relativistic programming. 
+ACM SIGOPS Operating Systems Review, 2010, 44(3): 102-109.
 ```
 
 Another nice description:
