@@ -14,7 +14,7 @@
 
 
 
-namespace yj
+namespace yrcu
 {
     void printRCUTable(RcuHashTable& rTable)
     {
@@ -37,7 +37,6 @@ namespace yj
 
 int main()
 {
-    yj::rcuHashTableTests();
-
-    //yj::printRCUTable(rTable);
+    yrcu::rcuTests();
+    yrcu::rcuHashTableTests();
 }

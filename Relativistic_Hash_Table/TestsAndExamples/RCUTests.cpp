@@ -7,7 +7,7 @@
 #include "../LibSource/include/RCUTypes.h"
 #include "../LibSource/include/RCUApi.h"
 
-namespace yj
+namespace yrcu
 {
     namespace
     {

@@ -1,7 +1,7 @@
 #pragma once
 #include "RCUHashTableTypes.h"
 #include "RCUApi.h"
-namespace yj
+namespace yrcu
 {
     namespace rcuHashTableDetail
     {

@@ -1,5 +1,5 @@
 #pragma once
-namespace yj
+namespace yrcu
 {
     void rcuHashTableTests();
 }

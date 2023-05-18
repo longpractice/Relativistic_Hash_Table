@@ -1,6 +1,6 @@
 #pragma once
 
-namespace yj
+namespace yrcu
 {
     void rcuTests();
 }

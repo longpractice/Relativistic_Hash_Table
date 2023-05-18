@@ -1,7 +1,7 @@
 #pragma once
 #include <atomic>
 
-namespace yj
+namespace yrcu
 {
     constexpr int c_maxEpoches = 2;
     constexpr int c_epochMask = c_maxEpoches - 1;
