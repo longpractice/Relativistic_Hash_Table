@@ -1,6 +1,6 @@
 #pragma once
 #include "RCUTypes.h"
-namespace yj
+namespace yrcu
 {
 #define YJ_OFFSET_OF(Type, Field) __builtin_offsetof(Type, Field)
 #define YJ_CONTAINER_OF(ptr, type, member) ((type*)((char*)ptr-YJ_OFFSET_OF(type, member)))

@@ -6,7 +6,7 @@
 #include <thread>
 #include <cassert>
 
-namespace yj
+namespace yrcu
 {
     namespace
     {

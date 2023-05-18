@@ -1,4 +1,6 @@
-This repository implements a relativistic hash table (in the repo, as a `RcuHashTable` ) using epoch based RCU in C++.
+
+
+Implements a relativistic hash table (in the repo, as a `RcuHashTable` ) using epoch based RCU in C++.
 
 Relativistic hash table was published in this paper:
 
@@ -37,7 +39,7 @@ struct RcuHashTableEntryAdapt
 {
     MyData* pMyData;
     RcuHashTableEntry entry;
-    
+
     static MyData* rcuHashTableEntryToPtrMyData(RcuHashTableEntry* pEntry)   
     {
         return CONTAINER_OF(pEntry, RcuHashTableEntryAdapt, entry)->pMyData;

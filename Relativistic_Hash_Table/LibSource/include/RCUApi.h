@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-namespace yj
+namespace yrcu
 {
     //An RCU zone is a rcu synchronization unit.
     //For a particular rcu zone, the reader calls rcuReadLock and rcuReadUnlock to 

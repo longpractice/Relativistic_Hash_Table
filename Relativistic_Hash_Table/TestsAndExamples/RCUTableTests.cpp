@@ -4,7 +4,7 @@
 #include <future>
 #include <iostream>
 
-namespace yj
+namespace yrcu
 {
     namespace
     {
@@ -13,13 +13,13 @@ namespace yj
         public:
             void run()
             {
-                yj::RcuHashTable rTable;
-                yj::rcuHashTableInit(rTable, 4);
+                RcuHashTable rTable;
+                rcuHashTableInit(rTable, 4);
 
                 struct Val
                 {
                     size_t v;
-                    yj::RcuHashTableEntry entry;
+                    RcuHashTableEntry entry;
                     bool valid = false;
                 };
 
@@ -34,8 +34,8 @@ namespace yj
                     arr[i].valid = true;
                     auto hash = std::hash<size_t>{}(i);
 
-                    bool inserted = yj::rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
-                        [](yj::RcuHashTableEntry* p1, yj::RcuHashTableEntry* p2)
+                    bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
+                        [](RcuHashTableEntry* p1, RcuHashTableEntry* p2)
                         {
                             return YJ_CONTAINER_OF(p1, Val, entry)->v == YJ_CONTAINER_OF(p2, Val, entry)->v;
                         }
@@ -43,8 +43,8 @@ namespace yj
                     if (!inserted)
                         throw std::exception("Broken");
 
-                    //yj::rcuHashTableInsert(rTable, &arr[i].entry);
-                    //yj::printRCUTable(rTable);
+                    //rcuHashTableInsert(rTable, &arr[i].entry);
+                    //printRCUTable(rTable);
                 }
 
                 std::atomic<bool> finished = false;
@@ -56,15 +56,15 @@ namespace yj
                         for (size_t i = 0; i < sizeTotal; ++i)
                         {
                             size_t hashVal = std::hash<size_t>{}(i);
-                            auto epoch = yj::rcuHashTableReadLock(rTable);
-                            bool found = yj::rcuHashTableFind(rTable, hashVal, [&](yj::RcuHashTableEntry* p)
+                            auto epoch = rcuHashTableReadLock(rTable);
+                            bool found = rcuHashTableFind(rTable, hashVal, [&](RcuHashTableEntry* p)
                                 {
                                     return YJ_CONTAINER_OF(p, Val, entry)->v == i;
                                 }
                             );
                             if (found && !arr[i].valid)
                                 throw std::exception("ElementNotValid in reader critical session.");
-                            yj::rcuHashTableReadUnlock(rTable, epoch);
+                            rcuHashTableReadUnlock(rTable, epoch);
                             if (i < sizePersist && !found)
                                 throw std::exception("Broken");
                         }
@@ -76,14 +76,14 @@ namespace yj
                     future = std::async(std::launch::async, f);
 
 
-                yj::rcuHashTableSynchronize(rTable);
+                rcuHashTableSynchronize(rTable);
                 for (auto i = sizePersist; i < sizeTotal; ++i)
                 {
                     arr[i].v = i;
                     arr[i].valid = true;
                     auto hash = std::hash<size_t>{}(i);
-                    bool inserted = yj::rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
-                        [](yj::RcuHashTableEntry* p1, yj::RcuHashTableEntry* p2)
+                    bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
+                        [](RcuHashTableEntry* p1, RcuHashTableEntry* p2)
                         {
                             return YJ_CONTAINER_OF(p1, Val, entry)->v == YJ_CONTAINER_OF(p2, Val, entry)->v;
                         }
@@ -100,11 +100,11 @@ namespace yj
                     {
                         auto hash = std::hash<size_t>{}(i);
 
-                        yj::RcuHashTableEntry* pEntry = yj::rcuHashTableTryDetachAndSynchronize(rTable, hash, [i](yj::RcuHashTableEntry* p)
+                        RcuHashTableEntry* pEntry = rcuHashTableTryDetachAndSynchronize(rTable, hash, [i](RcuHashTableEntry* p)
                             {return YJ_CONTAINER_OF(p, Val, entry)->v == i; }
                         );
 
-                        yj::rcuHashTableSynchronize(rTable);
+                        rcuHashTableSynchronize(rTable);
                         YJ_CONTAINER_OF(pEntry, Val, entry)->valid = false;
                         if (!pEntry)
                             throw std::exception("Broken");
@@ -116,8 +116,8 @@ namespace yj
                         arr[i].valid = true;
                         auto hash = std::hash<size_t>{}(i);
 
-                        bool inserted = yj::rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
-                            [](yj::RcuHashTableEntry* p1, yj::RcuHashTableEntry* p2)
+                        bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
+                            [](RcuHashTableEntry* p1, RcuHashTableEntry* p2)
                             {
                                 return YJ_CONTAINER_OF(p1, Val, entry)->v == YJ_CONTAINER_OF(p2, Val, entry)->v;
                             }
@@ -136,7 +136,7 @@ namespace yj
                 for (auto i = 0; i < sizePersist; ++i)
                 {
                     size_t hashVal = std::hash<size_t>{}(i);
-                    bool found = yj::rcuHashTableFind(rTable, hashVal, [&](yj::RcuHashTableEntry* p)
+                    bool found = rcuHashTableFind(rTable, hashVal, [&](RcuHashTableEntry* p)
                         {
                             return YJ_CONTAINER_OF(p, Val, entry)->v == i;
                         }

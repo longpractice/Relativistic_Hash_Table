@@ -6,7 +6,7 @@
 #include "RCUTypes.h"
 #include "RCUApi.h"
 
-namespace yj
+namespace yrcu
 {
     namespace
     {
