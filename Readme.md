@@ -14,6 +14,9 @@ Another nice description:
 https://lwn.net/Articles/612021/
 ```
 
+**A quick example**
+
+See `void rcuHashTableQuickExample()` in main.cpp.
 
 
 **Functionalities**

@@ -41,10 +41,18 @@ namespace yrcu
     //it is allowed to have multiple detach before a single synchronize operation
     //and after the synchronize operation, the detached nodes can be safely freed.
     void rcuHashTableSynchronize(RcuHashTable& table);
+
+    struct RcuHashTableConfig
+    {
+        int nrBuckets = 64;
+        int nrRcuBucketsForUnregisteredThreads = 128;
+        float expandFactor = 1.1f;
+        float shrinkFactor = 0.25f;
+    };
     
     //can only be called if the user is sure that no dup exists
     void rcuHashTableInsert(RcuHashTable& table, RcuHashTableEntry* pEntry);
-    void rcuHashTableInitWithRcuBucketsCount(RcuHashTable& table, int nrBuckets, int nrRcuBucketsForUnregisteredThreads);
+    void rcuHashTableInitDetailed(RcuHashTable& table, const RcuHashTableConfig& conf);
     //-----------------------------------------------------------------------------------------------//
 
 

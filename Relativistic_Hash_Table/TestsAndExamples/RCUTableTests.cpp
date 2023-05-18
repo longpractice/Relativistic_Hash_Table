@@ -14,7 +14,12 @@ namespace yrcu
             void run()
             {
                 RcuHashTable rTable;
-                rcuHashTableInit(rTable, 4);
+                RcuHashTableConfig conf{};
+                conf.expandFactor = 256.f;
+                conf.shrinkFactor = 8.f;
+                conf.nrBuckets = 2;
+                conf.nrRcuBucketsForUnregisteredThreads = 64 * std::thread::hardware_concurrency();
+                rcuHashTableInitDetailed(rTable, conf);
 
                 struct Val
                 {
@@ -104,7 +109,6 @@ namespace yrcu
                             {return YJ_CONTAINER_OF(p, Val, entry)->v == i; }
                         );
 
-                        rcuHashTableSynchronize(rTable);
                         YJ_CONTAINER_OF(pEntry, Val, entry)->valid = false;
                         if (!pEntry)
                             throw std::exception("Broken");

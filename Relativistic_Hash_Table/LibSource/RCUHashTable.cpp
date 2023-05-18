@@ -282,18 +282,23 @@ namespace yrcu
         }
     }
 
-    void rcuHashTableInitWithRcuBucketsCount(RcuHashTable& table, int nrBuckets, int nrRcuBucketsForUnregisteredThreads)
+    void rcuHashTableInitDetailed(RcuHashTable& table, const RcuHashTableConfig& conf)
     {
-        rcuInitZoneWithBucketCounts(table.rcuZone, nrRcuBucketsForUnregisteredThreads);
-        auto nrBucketsPowerOf2 = upperBoundPowerOf2(nrBuckets);
+        rcuInitZoneWithBucketCounts(table.rcuZone, conf.nrRcuBucketsForUnregisteredThreads);
+        auto nrBucketsPowerOf2 = upperBoundPowerOf2(conf.nrBuckets);
         RcuHashTable::BucketsInfo* bucketsInfo = allocateAndInitBuckets(nrBucketsPowerOf2);
+        table.expandFactor = conf.expandFactor;
+        table.shrinkFactor = conf.shrinkFactor;
         table.pBucketsInfo.store(bucketsInfo, std::memory_order_relaxed);
     }
 
     void rcuHashTableInit(RcuHashTable& table, int nrBuckets)
     {
         auto nrThreadsBuckets = std::thread::hardware_concurrency() * 64;
-        rcuHashTableInitWithRcuBucketsCount(table, nrBuckets, nrThreadsBuckets);
+        RcuHashTableConfig conf;
+        conf.nrBuckets = nrBuckets;
+        conf.nrRcuBucketsForUnregisteredThreads = nrThreadsBuckets;
+        rcuHashTableInitDetailed(table, conf);
     }
 
     //can only be called if the user is sure that no dup exists
