@@ -25,6 +25,7 @@
     <ClInclude Include="LibSource\include\RCUTypes.h" />
     <ClInclude Include="TestsAndExamples\RCUTableTests.h" />
     <ClInclude Include="TestsAndExamples\RCUTests.h" />
+    <ClInclude Include="TestsAndExamples\TestHelper.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LibSource\RCU.cpp" />

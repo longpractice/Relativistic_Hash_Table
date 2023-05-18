@@ -112,8 +112,8 @@ namespace yrcu
 
 int main()
 {
-    yrcu::rcuHashTableQuickExample();
-
     yrcu::rcuTests();
+
+    yrcu::rcuHashTableQuickExample();
     yrcu::rcuHashTableTests();
 }

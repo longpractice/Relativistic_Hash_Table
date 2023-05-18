@@ -1,8 +1,12 @@
 #include "RCUHashTableApi.h"
 #include "RCUHashTableTypes.h"
+#include "TestHelper.h"
 #include <vector>
 #include <future>
 #include <iostream>
+#include <memory>
+#include <unordered_set>
+#include <shared_mutex>
 
 namespace yrcu
 {
@@ -151,10 +155,149 @@ namespace yrcu
 
             }
         };
+
+        struct PerfComparisonWithStdUnorderedSet
+        {
+            static constexpr size_t c_nrElementsToLookUp = 2ull << 18;
+            static constexpr size_t c_nrRounds = 10;;
+
+            template<typename TMutex, template<typename> typename TReadLock, bool readOnly>
+            void runStdUnorderedMapMutex(const std::string& title)
+            {
+                std::unordered_set<size_t> mySet;
+                for (size_t v = 0; v < c_nrElementsToLookUp; ++v)
+                    mySet.emplace(v);
+
+                TMutex m;
+                {
+                    Timer timer{ title };
+                    std::vector<std::future<void>> futures{std::thread::hardware_concurrency()};
+
+                    auto f = [&m, &mySet, this]()
+                    {
+                        for (size_t round = 0; round < c_nrRounds; ++round)
+                            for (auto v = 0; v < c_nrElementsToLookUp; ++v)
+                            {
+                                if constexpr (!readOnly)
+                                {
+                                    TReadLock<TMutex> l {m};
+                                    if (mySet.find(v) == mySet.end())
+                                        throw std::exception("Wrong");
+                                }
+                                else
+                                {
+                                    if (mySet.find(v) == mySet.end())
+                                        throw std::exception("Wrong");
+                                }
+                            }
+                    };
+
+                    for (auto& myFuture : futures)
+                        myFuture = std::async(std::launch::async, f);
+
+
+                    //some seldom writing operations
+                    if (!readOnly)
+                        for (auto i = 0; i < c_nrElementsToLookUp; ++i)
+                        {
+                            if (i % 1024 != 0)
+                                continue;
+                            std::lock_guard<TMutex> l {m};
+                            auto v = i + c_nrElementsToLookUp;
+                            mySet.emplace(v);
+                        }
+                    for (auto& myFuture : futures)
+                        myFuture.get();
+                }
+            }
+
+
+
+            void runRcuHashMap()
+            {
+                RcuHashTable rTable;
+                rcuHashTableInit(rTable);
+                //user data to be tracked by the hash table
+                struct MyElement
+                {
+                    size_t value;
+                    RcuHashTableEntry entry;
+                };
+
+                //here we use the slow heap allocated elements to mimic the std::unordered_set behavior to rule out the cache perf influence
+                std::vector<std::unique_ptr<MyElement>> myData {c_nrElementsToLookUp};
+                for (size_t item = 0; item < myData.size(); ++item)
+                {
+                    myData[item] = std::make_unique<MyElement>();
+                    myData[item]->value = item;
+                    auto hashVal = std::hash<size_t>{}(item);
+                    bool inserted = rcuHashTableTryInsert(rTable, &myData[item]->entry, hashVal, [](RcuHashTableEntry* p1, RcuHashTableEntry* p2)
+                        {
+                            return YJ_CONTAINER_OF(p1, MyElement, entry)->value == YJ_CONTAINER_OF(p2, MyElement, entry)->value;
+                        });
+                }
+
+                {
+                    Timer timer{ "RCUHashTable: " };
+                    std::vector<std::future<void>> futures{std::thread::hardware_concurrency()};
+                    auto f = [&rTable, &myData, this]()
+                    {
+                        for (size_t round = 0; round < c_nrRounds; ++round)
+                            for (auto i = 0; i < myData.size(); ++i)
+                            {
+
+                                RcuHashTableReadLockGuard l(rTable);
+                                auto hashVal = std::hash<size_t>{}(myData[i]->value);
+                                RcuHashTableEntry* pEntry = rcuHashTableFind(rTable, hashVal, [i](const RcuHashTableEntry* p)
+                                    {
+                                        return YJ_CONTAINER_OF(p, MyElement, entry)->value == i;
+                                    });
+                                if (!pEntry)
+                                    throw std::exception("Wrong");
+                            }
+                    };
+
+                    for (auto& myFuture : futures)
+                        myFuture = std::async(std::launch::async, f);
+
+                    //some seldom writing operations
+                    std::vector<std::unique_ptr<MyElement>> myDataAdditional {c_nrElementsToLookUp};
+                    for (auto i = 0; i < myData.size(); ++i)
+                    {
+                        if (i % 1024 != 0)
+                            continue;
+                        auto v = i + myData.size();
+                        myDataAdditional[i] = std::make_unique<MyElement>();
+                        myDataAdditional[i]->value = v;
+                        auto hash = std::hash<int>{}(myDataAdditional[i]->value);
+
+                        bool inserted = rcuHashTableTryInsert(rTable, &myDataAdditional[i]->entry, hash,
+                            [](const RcuHashTableEntry* p0, const RcuHashTableEntry* p1)
+                            {return YJ_CONTAINER_OF(p0, MyElement, entry)->value == YJ_CONTAINER_OF(p0, MyElement, entry)->value;  }
+                        );
+                    }
+
+                    for (auto& myFuture : futures)
+                        myFuture.get();
+                }
+            };
+
+            void run()
+            {
+                runStdUnorderedMapMutex<std::shared_mutex, std::shared_lock, true>("UnorderedMap read only");
+                runStdUnorderedMapMutex<std::shared_mutex, std::shared_lock, false>("UnorderedMap with std::shared_mutex");
+                runStdUnorderedMapMutex<std::mutex, std::lock_guard, false>("UnorderedMap with std::mutex");
+                runRcuHashMap();
+            }
+        };
     }
+
 
     void rcuHashTableTests()
     {
+        PerfComparisonWithStdUnorderedSet comp;
+        comp.run();
+
         RCUTableTest0 test0;
         test0.run();
     }

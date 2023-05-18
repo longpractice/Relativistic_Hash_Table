@@ -17,9 +17,15 @@ Another nice description:
 https://lwn.net/Articles/612021/
 ```
 
+---
+
+
 **A quick example**
 
 See `void rcuHashTableQuickExample()` in main.cpp.
+
+
+---
 
 
 **Functionalities**
@@ -48,6 +54,32 @@ struct RcuHashTableEntryAdapt
     } 
 };
 ```
+
+---
+
+Benchmark: RCU hash table usually performs ~10x than std::unordered_map equiped with std::mutex or std::shared_mutex.
+
+`PerfComparisonWithStdUnorderedSet` in RCUTableTests.cpp tests in `Intel i7-7700K CPU 4.20GHz 8 Logical Processors` shows this result:
+
+```
+UnorderedMap read-only(no mutex, no rcu): 302_ms
+RCUHashTable: : 435_ms
+UnorderedMap with std::shared_mutex: 4003_ms
+UnorderedMap with std::mutex: 6148_ms
+```
+
+Another benchmark `RCUBenchmark` in `RCUTests.cpp` related to a general usage of RCUZone to protect a piece of "read mostly" data, where also includes a comparison with the atomic shared pointer which is the slowest: 
+
+```
+ReadOnly (no lock or RCU): 127_ms
+RCU(with registered threads): 252_ms
+RCU(without registered threads): 278_ms
+Atomic shared pointer: 5018_ms
+SharedMutex: 2062_ms
+Mutex: 1654_ms
+```
+
+---
 
 **Header arrangement**
 

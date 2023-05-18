@@ -7,11 +7,12 @@
 #include "../LibSource/include/RCUTypes.h"
 #include "../LibSource/include/RCUApi.h"
 
+
 namespace yrcu
 {
     namespace
     {
-        struct RCUTest0
+        struct RCUBenchmark
         {
         private:
             std::random_device rd;  // a seed source for the random number engine
@@ -310,11 +311,13 @@ namespace yrcu
                 rcuReleaseZone(zone);
             }
         };
-    }
+    
+
+}
 
     void rcuTests()
     {
-        RCUTest0 test0;
+        RCUBenchmark test0;
         test0.run();
     }
 }
