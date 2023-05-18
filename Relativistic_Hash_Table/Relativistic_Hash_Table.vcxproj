@@ -18,6 +18,19 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="LibSource\include\RCUApi.h" />
+    <ClInclude Include="LibSource\include\RCUHashTableApi.h" />
+    <ClInclude Include="LibSource\include\RCUHashTableTypes.h" />
+    <ClInclude Include="LibSource\include\RCUTypes.h" />
+    <ClInclude Include="TestsAndExamples\RCUTests.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="LibSource\RCU.cpp" />
+    <ClCompile Include="LibSource\RCUHashTable.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="TestsAndExamples\RCUTests.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -129,17 +142,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="RCU.cpp" />
-    <ClCompile Include="RCUHashTable.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="RCUApi.h" />
-    <ClInclude Include="RCUTypes.h" />
-    <ClInclude Include="RCUHashTableApi.h" />
-    <ClInclude Include="RCUHashTableTypes.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
