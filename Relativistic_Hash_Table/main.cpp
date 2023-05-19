@@ -27,7 +27,7 @@ namespace yrcu
         {
             int value;
             //to be linked by the hash table
-            RcuHashTableEntry entry;
+            RNode entry;
             bool valid;
         };
 
@@ -38,7 +38,7 @@ namespace yrcu
             myData[item].value = static_cast<int>(item);
             myData[item].valid = true;
             auto hashVal = std::hash<int>{}(item);
-            bool inserted = rcuHashTableTryInsert(rTable, &myData[item].entry, hashVal, [](RcuHashTableEntry* p1, RcuHashTableEntry* p2)
+            bool inserted = rcuHashTableTryInsert(rTable, &myData[item].entry, hashVal, [](RNode* p1, RNode* p2)
                 {
                     return YJ_CONTAINER_OF(p1, MyElement, entry)->value == YJ_CONTAINER_OF(p2, MyElement, entry)->value;
                 });
@@ -52,7 +52,7 @@ namespace yrcu
             {
                 RcuHashTableReadLockGuard l(rTable);
                 auto hashVal = std::hash<int>{}(myData[i].value);
-                RcuHashTableEntry* pEntry = rcuHashTableFind(rTable, hashVal, [i](const RcuHashTableEntry* p)
+                RNode* pEntry = rcuHashTableFind(rTable, hashVal, [i](const RNode* p)
                     {
                         return YJ_CONTAINER_OF(p, MyElement, entry)->value == i;
                     });
@@ -80,7 +80,7 @@ namespace yrcu
                 continue;
             auto hash = std::hash<int>{}(myData[i].value);
 
-            RcuHashTableEntry* pEntry = rcuHashTableTryDetachAndSynchronize(rTable, hash, [val = myData[i].value](const RcuHashTableEntry* p)
+            RNode* pEntry = rcuHashTableTryDetachAndSynchronize(rTable, hash, [val = myData[i].value](const RNode* p)
                 {return YJ_CONTAINER_OF(p, MyElement, entry)->value == val; }
             );
             assert(pEntry);
@@ -102,7 +102,7 @@ namespace yrcu
 
             for (auto p = pSrc->list.next.load(std::memory_order_relaxed); p != nullptr; p = p->next.load(std::memory_order_relaxed))
             {
-                size_t hashV = YJ_CONTAINER_OF(p, RcuHashTableEntry, head)->hash;
+                size_t hashV = YJ_CONTAINER_OF(p, RNode, head)->hash;
                 std::cout << " hash: " << hashV;
             }
         }

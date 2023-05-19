@@ -92,7 +92,7 @@ namespace yrcu
 
         size_t computeHashBucketId(AtomicSingleHead* p, size_t hashMask)
         {
-            return YJ_CONTAINER_OF(p, RcuHashTableEntry, head)->hash & hashMask;
+            return YJ_CONTAINER_OF(p, RNode, head)->hash & hashMask;
         }
 
         //caller should make sure that pZipStart->next is not null
@@ -302,7 +302,7 @@ namespace yrcu
     }
 
     //can only be called if the user is sure that no dup exists
-    void rcuHashTableInsert(RcuHashTable& table, RcuHashTableEntry* pEntry)
+    void rcuHashTableInsert(RcuHashTable& table, RNode* pEntry)
     {
         RcuHashTable::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_relaxed);
         auto bucketMask = pBucketsInfo->nrBucketsPowerOf2 - 1;

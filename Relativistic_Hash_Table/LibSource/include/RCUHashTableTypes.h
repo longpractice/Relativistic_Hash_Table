@@ -9,7 +9,7 @@ namespace yrcu
         std::atomic<AtomicSingleHead*> next;
     };
 
-    struct RcuHashTableEntry
+    struct RNode
     {
         size_t hash;
         AtomicSingleHead head;

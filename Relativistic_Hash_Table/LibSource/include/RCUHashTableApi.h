@@ -12,8 +12,13 @@ namespace yrcu
     ///////////////////////////////////////////////////////////////////////////////////////////
     //--------------------------Advanced API-------------------------------------------------//
     ///////////////////////////////////////////////////////////////////////////////////////////
+    
+    //Op is of function signature of bool(RNode* p0), which returns if the entry is what you are looking
+    //try erase but no synchronize
+    //This enables the caller to do several rcuHashTableTryDetach operations, do one rcuHashTableSynchronize and then
+    //do all the garbage collections.
     template<typename Op>
-    RcuHashTableEntry* rcuHashTableTryDetach(RcuHashTable& table, size_t hashVal, Op matchOp, bool& outIfAlreadyRcuSynrhonized)
+    RNode* rcuHashTableTryDetach(RcuHashTable& table, size_t hashVal, Op matchOp, bool* outIfAlreadyRcuSynrhonized = nullptr)
     {
         RcuHashTable::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_acquire);
         size_t bucketHash = pBucketsInfo->nrBucketsPowerOf2 - 1;
@@ -23,13 +28,15 @@ namespace yrcu
         for (AtomicSingleHead* p = pLast->next.load(std::memory_order_relaxed); p != nullptr; )
         {
             AtomicSingleHead* pNext = p->next.load(std::memory_order_relaxed);
-            RcuHashTableEntry* pEntry = YJ_CONTAINER_OF(p, RcuHashTableEntry, head);
+            RNode* pEntry = YJ_CONTAINER_OF(p, RNode, head);
             if (pEntry->hash == hashVal && matchOp(pEntry))
             {
                 pLast->next.store(pNext, std::memory_order_release);
                 auto oldSize = table.size.fetch_add(-1, std::memory_order_relaxed);
                 //shrinking happens much less often
-                outIfAlreadyRcuSynrhonized = rcuHashTableDetail::shrinkBucketsByFac2IfNecessary(oldSize, pBucketsInfo->nrBucketsPowerOf2, table);
+                bool ifAlreadyRcuSynrhonized = rcuHashTableDetail::shrinkBucketsByFac2IfNecessary(oldSize, pBucketsInfo->nrBucketsPowerOf2, table);
+                if (outIfAlreadyRcuSynrhonized)
+                    *outIfAlreadyRcuSynrhonized = ifAlreadyRcuSynrhonized;
                 return pEntry;
             }
             pLast = p;
@@ -51,7 +58,7 @@ namespace yrcu
     };
     
     //can only be called if the user is sure that no dup exists
-    void rcuHashTableInsert(RcuHashTable& table, RcuHashTableEntry* pEntry);
+    void rcuHashTableInsert(RcuHashTable& table, RNode* pEntry);
     void rcuHashTableInitDetailed(RcuHashTable& table, const RcuHashTableConfig& conf);
     //-----------------------------------------------------------------------------------------------//
 
@@ -89,9 +96,9 @@ namespace yrcu
     //Read operation
     //\parameter hashVal should be the hash value of the find target, only table entries with a hash value equals to `hashVal` is checked for
     // equality with matchOp.
-    //op should have function signature of bool(RcuHashTableEntry*) to identify if the RcuHashTableEntry equals to what is to be found
+    //op should have function signature of bool(RNode*) to identify if the RNode equals to what is to be found
     template<typename Op>
-    RcuHashTableEntry* rcuHashTableFind(const RcuHashTable& table, size_t hashVal, Op matchOp)
+    RNode* rcuHashTableFind(const RcuHashTable& table, size_t hashVal, Op matchOp)
     {
         RcuHashTable::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_acquire);
         size_t bucketHash = pBucketsInfo->nrBucketsPowerOf2 - 1;
@@ -99,7 +106,7 @@ namespace yrcu
         RcuHashTable::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
         for (auto p = pBucket->list.next.load(std::memory_order_acquire); p != nullptr; p = p->next.load(std::memory_order_acquire))
         {
-            RcuHashTableEntry* pEntry = YJ_CONTAINER_OF(p, RcuHashTableEntry, head);
+            RNode* pEntry = YJ_CONTAINER_OF(p, RNode, head);
             if (pEntry->hash == hashVal && matchOp(pEntry))
                 return pEntry;
         }
@@ -107,10 +114,10 @@ namespace yrcu
     }
 
     //Write operation: all writers must be serialized
-    //Op is of function signature of bool(RcuHashTableEntry* p0, RcuHashTaleEntry* p1), which returns if
+    //Op is of function signature of bool(RNode* p0, RcuHashTaleEntry* p1), which returns if
     //two hash table entries are equivalent.
     template<typename Op>
-    bool rcuHashTableTryInsert(RcuHashTable& table, RcuHashTableEntry* pEntry, size_t hashVal, Op matchOp)
+    bool rcuHashTableTryInsert(RcuHashTable& table, RNode* pEntry, size_t hashVal, Op matchOp)
     {
         pEntry->hash = hashVal;
         RcuHashTable::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_relaxed);
@@ -121,7 +128,7 @@ namespace yrcu
         AtomicSingleHead* p;
         for (p = pFirst; p != nullptr; p = p->next.load(std::memory_order_relaxed))
         {
-            RcuHashTableEntry* pEntryExisting = YJ_CONTAINER_OF(p, RcuHashTableEntry, head);
+            RNode* pEntryExisting = YJ_CONTAINER_OF(p, RNode, head);
             if (pEntry->hash == pEntryExisting->hash && matchOp(pEntry, pEntryExisting))
                 break;
         }
@@ -136,14 +143,14 @@ namespace yrcu
     }
 
     //Write operation: all writers must be serialized
-    //Op is of function signature of bool(RcuHashTableEntry* p0), which returns if the entry is what you are looking
+    //Op is of function signature of bool(RNode* p0), which returns if the entry is what you are looking
     //for.
-    //rcuSynchronize is called internally and it is safe to delete resource of RcuHashTableEntry.
+    //rcuSynchronize is called internally and it is safe to delete resource of RNode.
     template<typename Op>
-    RcuHashTableEntry* rcuHashTableTryDetachAndSynchronize(RcuHashTable& table, size_t hashVal, Op matchOp)
+    RNode* rcuHashTableTryDetachAndSynchronize(RcuHashTable& table, size_t hashVal, Op matchOp)
     {
         bool ifAlreadyRcuSynchronized = false;
-        RcuHashTableEntry* pEntry = rcuHashTableTryDetach(table, hashVal, matchOp, ifAlreadyRcuSynchronized);
+        RNode* pEntry = rcuHashTableTryDetach(table, hashVal, matchOp, &ifAlreadyRcuSynchronized);
         if (pEntry == nullptr)
             return pEntry;
         if (!ifAlreadyRcuSynchronized)
