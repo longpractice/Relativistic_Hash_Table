@@ -123,7 +123,7 @@ namespace yrcu
                         auto v = i + myData.size();
                         myDataAdditional[i] = std::make_unique<MyElement>();
                         myDataAdditional[i]->value = v;
-                        auto hash = std::hash<int>{}(myDataAdditional[i]->value);
+                        auto hash = std::hash<size_t>{}(myDataAdditional[i]->value);
 
                         bool inserted = rcuHashTableTryInsert(rTable, &myDataAdditional[i]->entry, hash,
                             [](const RNode* p0, const RNode* p1)
@@ -145,9 +145,7 @@ namespace yrcu
             }
         };
 
-
-
-        struct RCUTableTest0
+        struct RCUTableNormalUsageStress
         {
         public:
             size_t myHash(size_t v)
@@ -292,6 +290,93 @@ namespace yrcu
             }
         };
 
+
+        struct RCUTableManualStressExpandShrink
+        {
+        public:
+            struct Val
+            {
+                size_t v;
+                RNode entry;
+            };
+            size_t sizeTotal = 8888;
+            size_t myHash(size_t v, size_t seed)
+            {
+                return std::hash<size_t>{}(v + seed);
+            }
+
+            void run()
+            {
+                RcuHashTableConfig conf{};
+                conf.nrBuckets = 4;
+                conf.nrRcuBucketsForUnregisteredThreads = 64 * std::thread::hardware_concurrency();
+                for (int j = 1; j < 100; ++j)
+                {
+                    RcuHashTable rTable;
+                    rcuHashTableInitDetailed(rTable, conf);
+                    std::vector<Val> arr = std::vector<Val>{ sizeTotal };
+                    for (size_t i = 0; i < sizeTotal; ++i)
+                    {
+                        arr[i].v = i;
+                        auto hash = myHash(i, j);
+                        bool inserted = rcuHashTableTryInsertNoExpand(rTable, &arr[i].entry, hash,
+                            [](RNode* p1, RNode* p2)
+                            {
+                                return YJ_CONTAINER_OF(p1, Val, entry)->v == YJ_CONTAINER_OF(p2, Val, entry)->v;
+                            }
+                        );
+                        if (!inserted)
+                            throw std::exception("Broken");
+                    }
+
+                    std::atomic<bool> finished = false;
+
+                    auto f = [&]()
+                    {
+                        while (!finished.load(std::memory_order_relaxed))
+                        {
+                            for (size_t i = 0; i < sizeTotal; ++i)
+                            {
+                                size_t hashVal = myHash(i, j);
+                                auto epoch = rcuHashTableReadLock(rTable);
+                                bool found = rcuHashTableFind(rTable, hashVal, [&](RNode* p)
+                                    {
+                                        return YJ_CONTAINER_OF(p, Val, entry)->v == i;
+                                    }
+                                );
+                                if (!found)
+                                    throw std::exception("Broken");
+                                rcuHashTableReadUnlock(rTable, epoch);
+                            }
+                        }
+                    };
+
+                    std::future<void> futures[7];
+                    for (auto& future : futures)
+                        future = std::async(std::launch::async, f);
+
+                    //periodically remove and insert
+                    for (int j = 0; j < 3000000; ++j)
+                    {
+                        //std::cout << j << " round of erasing and inserting." << std::endl;
+                        rcuHashTableExpandBuckets2x(rTable);
+                        rcuHashTableExpandBuckets2x(rTable);
+                        rcuHashTableExpandBuckets2x(rTable);
+
+                        rcuHashTableShrinkBuckets2x(rTable);
+                        rcuHashTableShrinkBuckets2x(rTable);
+                        rcuHashTableShrinkBuckets2x(rTable);
+                    }
+
+                    finished.store(true, std::memory_order_relaxed);
+
+                    for (auto& future : futures)
+                        future.get();
+
+                }
+            }
+        };
+
         void RCUTableTestSingleThreadTest()
         {
             RcuHashTable tbl;
@@ -355,12 +440,15 @@ namespace yrcu
 
     void rcuHashTableTests()
     {
+        RCUTableManualStressExpandShrink testManualShrinkExpand;
+        testManualShrinkExpand.run();
+
         RCUTableTestSingleThreadTest();
 
         PerfComparisonWithStdUnorderedSet comp;
         comp.run();
 
-        RCUTableTest0 test0;
-        test0.run();
+        RCUTableNormalUsageStress testNormalUsageStress;
+        testNormalUsageStress.run();
     }
 }
