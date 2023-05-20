@@ -150,13 +150,14 @@ namespace yrcu
         struct RCUTableTest0
         {
         public:
+            size_t myHash(size_t v)
+            {
+                return std::hash<size_t>{}(v);
+            }
             void run()
             {
                 RcuHashTable rTable;
                 RcuHashTableConfig conf{};
-                conf.expandFactor = 256.f;
-                conf.shrinkFactor = 8.f;
-                conf.nrBuckets = 2;
                 conf.nrRcuBucketsForUnregisteredThreads = 64 * std::thread::hardware_concurrency();
                 rcuHashTableInitDetailed(rTable, conf);
 
@@ -176,7 +177,7 @@ namespace yrcu
                 {
                     arr[i].v = i;
                     arr[i].valid = true;
-                    auto hash = std::hash<size_t>{}(i);
+                    auto hash = myHash(i);
 
                     bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
                         [](RNode* p1, RNode* p2)
@@ -197,9 +198,9 @@ namespace yrcu
                 {
                     while (!finished.load(std::memory_order_relaxed))
                     {
-                        for (size_t i = 0; i < sizeTotal; ++i)
+                        for (size_t i = 0; i < sizePersist; ++i)
                         {
-                            size_t hashVal = std::hash<size_t>{}(i);
+                            size_t hashVal = myHash(i);
                             auto epoch = rcuHashTableReadLock(rTable);
                             bool found = rcuHashTableFind(rTable, hashVal, [&](RNode* p)
                                 {
@@ -225,7 +226,7 @@ namespace yrcu
                 {
                     arr[i].v = i;
                     arr[i].valid = true;
-                    auto hash = std::hash<size_t>{}(i);
+                    auto hash = myHash(i);
                     bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
                         [](RNode* p1, RNode* p2)
                         {
@@ -237,12 +238,12 @@ namespace yrcu
                 }
 
                 //periodically remove and insert
-                for (int j = 0; j < 3; ++j)
+                for (int j = 0; j < 3000; ++j)
                 {
                     std::cout << j << " round of erasing and inserting." << std::endl;
                     for (auto i = sizePersist; i < sizeTotal; ++i)
                     {
-                        auto hash = std::hash<size_t>{}(i);
+                        auto hash = myHash(i);
 
                         RNode* pEntry = rcuHashTableTryDetachAndSynchronize(rTable, hash, [i](RNode* p)
                             {return YJ_CONTAINER_OF(p, Val, entry)->v == i; }
@@ -257,7 +258,7 @@ namespace yrcu
                     {
                         arr[i].v = i;
                         arr[i].valid = true;
-                        auto hash = std::hash<size_t>{}(i);
+                        auto hash = myHash(i);
 
                         bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
                             [](RNode* p1, RNode* p2)
@@ -278,7 +279,7 @@ namespace yrcu
 
                 for (auto i = 0; i < sizePersist; ++i)
                 {
-                    size_t hashVal = std::hash<size_t>{}(i);
+                    size_t hashVal = myHash(i);
                     bool found = rcuHashTableFind(rTable, hashVal, [&](RNode* p)
                         {
                             return YJ_CONTAINER_OF(p, Val, entry)->v == i;
@@ -335,7 +336,7 @@ namespace yrcu
 
             for (size_t i = 0; i < values.size(); ++i)
             {
-                RNode* detached = rcuHashTableTryDetach(tbl, std::hash<size_t>{}(i),
+                RNode* detached = rcuHashTableTryDetachAutoShrink(tbl, std::hash<size_t>{}(i),
                     [i](RNode* p) { return Element::fromNode(p)->v == i; });
                 if (!detached)
                     throw std::exception("Broken");

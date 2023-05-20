@@ -266,6 +266,8 @@ namespace yrcu
             auto* bucketsInfoOld = table.pBucketsInfo.load(std::memory_order_relaxed);
             size_t nrBucketsOld = bucketsInfoOld->nrBucketsPowerOf2;
             size_t nrBucketsNew = nrBucketsOld / 2;
+            if (nrBucketsNew == 0)
+                return nullptr;
             size_t bucketMask = nrBucketsNew - 1;
             RcuHashTable::BucketsInfo* bucketsInfoNew = allocateAndInitBuckets(nrBucketsNew);
             for (size_t iHalf = 0; iHalf < nrBucketsNew; ++iHalf)
@@ -302,7 +304,7 @@ namespace yrcu
     }
 
     //can only be called if the user is sure that no dup exists
-    void rcuHashTableInsert(RcuHashTable& table, RNode* pEntry)
+    void rcuHashTableInsertNoExpand(RcuHashTable& table, RNode* pEntry)
     {
         RcuHashTable::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_relaxed);
         auto bucketMask = pBucketsInfo->nrBucketsPowerOf2 - 1;
@@ -310,21 +312,39 @@ namespace yrcu
         RcuHashTable::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
         pEntry->head.next.store(pBucket->list.next, std::memory_order_release);
         pBucket->list.next.store(&pEntry->head, std::memory_order_release);
-        auto oldSize = table.size.fetch_add(1, std::memory_order_relaxed);
-        rcuHashTableDetail::expandBucketsByFac2IfNecessary(oldSize, pBucketsInfo->nrBucketsPowerOf2, table);
+        table.size.fetch_add(1, std::memory_order_relaxed);
     }
 
     int64_t rcuHashTableReadLock(RcuHashTable& table)
     {
         return rcuReadLock(table.rcuZone);
     }
+
+
     void rcuHashTableReadUnlock(RcuHashTable& table, int64_t epoch)
     {
         rcuReadUnlock(table.rcuZone, epoch);
     }
+
+
     void rcuHashTableSynchronize(RcuHashTable& table)
     {
         rcuSynchronize(table.rcuZone);
+    }
+
+    void rcuHashTableExpandBuckets2x(RcuHashTable& table)
+    {
+        auto pOldInfo = expandBucketsByFac2ReturnOld(table);
+        destroyAndFreeBuckets(pOldInfo);
+    }
+
+    bool rcuHashTableShrinkBuckets2x(RcuHashTable& table)
+    {
+        auto pOldInfo = shrinkBucketsByFac2ReturnOld(table);
+        if (!pOldInfo)
+            return false;
+        destroyAndFreeBuckets(pOldInfo);
+        return true;
     }
 
     RcuHashTable::~RcuHashTable()
@@ -339,20 +359,13 @@ namespace yrcu
         void expandBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RcuHashTable& table)
         {
             if ((float)nrElements > table.expandFactor * float(nrBuckets))
-            {
-                auto pOldInfo = expandBucketsByFac2ReturnOld(table);
-                destroyAndFreeBuckets(pOldInfo);
-            }
+                rcuHashTableExpandBuckets2x(table);
         }
 
         bool shrinkBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RcuHashTable& table)
         {
             if ((float)nrElements < table.shrinkFactor * float(nrBuckets) && nrElements > 128)
-            {
-                auto pOldInfo = shrinkBucketsByFac2ReturnOld(table);
-                destroyAndFreeBuckets(pOldInfo);
-                return true;
-            }
+                return rcuHashTableShrinkBuckets2x(table);
             return false;
         }
     }
