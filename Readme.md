@@ -2,7 +2,7 @@
 Welcome to use, comment, report bugs and contribute to this new library, I will usually reply fast. The library here is well tested.
 
 
-Implements a relativistic hash table ( `RcuHashTable` ) using epoch-based-RCU in C++.
+Implements a relativistic hash table ( `RTable` ) using epoch-based-RCU in C++.
 
 Paper defining relativistic hash table:
 
