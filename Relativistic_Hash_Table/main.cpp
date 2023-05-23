@@ -110,8 +110,12 @@ namespace yrcu
 
 int main()
 {
+    //rcu zone tests
     yrcu::rcuTests();
 
+    //a quick example of the rcu hash table (rTable)
     yrcu::rcuHashTableQuickExample();
+
+    //stress tests
     yrcu::rTableTests();
 }
