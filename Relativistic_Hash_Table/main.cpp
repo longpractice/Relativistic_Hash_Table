@@ -19,7 +19,7 @@ namespace yrcu
 {
     void rcuHashTableQuickExample()
     {
-        RcuHashTable rTable;
+        RTable rTable;
         rcuHashTableInit(rTable);
 
         //user data to be tracked by the hash table
@@ -50,7 +50,7 @@ namespace yrcu
         {
             for (auto i = 0; i < myData.size(); ++i)
             {
-                RcuHashTableReadLockGuard l(rTable);
+                RTableReadLockGuard l(rTable);
                 auto hashVal = std::hash<int>{}(myData[i].value);
                 RNode* pEntry = rcuHashTableFind(rTable, hashVal, [i](const RNode* p)
                     {
@@ -91,7 +91,7 @@ namespace yrcu
             f.get();
     }
 
-    void printRCUTable(RcuHashTable& rTable)
+    void printRCUTable(RTable& rTable)
     {
         std::cout << "-------------------\n";
         auto pBucket = rTable.pBucketsInfo.load();

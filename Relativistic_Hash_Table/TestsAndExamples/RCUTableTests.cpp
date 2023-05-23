@@ -69,7 +69,7 @@ namespace yrcu
 
             void runRcuHashMap()
             {
-                RcuHashTable rTable;
+                RTable rTable;
                 rcuHashTableInit(rTable);
                 //user data to be tracked by the hash table
                 struct MyElement
@@ -100,7 +100,7 @@ namespace yrcu
                             for (auto i = 0; i < myData.size(); ++i)
                             {
 
-                                RcuHashTableReadLockGuard l(rTable);
+                                RTableReadLockGuard l(rTable);
                                 auto hashVal = std::hash<size_t>{}(myData[i]->value);
                                 RNode* pEntry = rcuHashTableFind(rTable, hashVal, [i](const RNode* p)
                                     {
@@ -154,8 +154,8 @@ namespace yrcu
             }
             void run()
             {
-                RcuHashTable rTable;
-                RcuHashTableConfig conf{};
+                RTable rTable;
+                RTableConfig conf{};
                 conf.nrRcuBucketsForUnregisteredThreads = 64 * std::thread::hardware_concurrency();
                 rcuHashTableInitDetailed(rTable, conf);
 
@@ -307,12 +307,12 @@ namespace yrcu
 
             void run()
             {
-                RcuHashTableConfig conf{};
+                RTableConfig conf{};
                 conf.nrBuckets = 4;
                 conf.nrRcuBucketsForUnregisteredThreads = 64 * std::thread::hardware_concurrency();
                 for (int j = 1; j < 100; ++j)
                 {
-                    RcuHashTable rTable;
+                    RTable rTable;
                     rcuHashTableInitDetailed(rTable, conf);
                     std::vector<Val> arr = std::vector<Val>{ sizeTotal };
                     for (size_t i = 0; i < sizeTotal; ++i)
@@ -379,7 +379,7 @@ namespace yrcu
 
         void RCUTableTestSingleThreadTest()
         {
-            RcuHashTable tbl;
+            RTable tbl;
             rcuHashTableInit(tbl);
 
             struct Element

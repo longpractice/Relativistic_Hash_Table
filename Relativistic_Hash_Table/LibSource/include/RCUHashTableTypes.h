@@ -15,10 +15,10 @@ namespace yrcu
         AtomicSingleHead head;
     };
 
-    //RcuHashTableCore does not include the RCUZone and thus is feasible for shared RCUZone
-    struct RcuHashTableCore
+    //RTableCore does not include the RCUZone and thus is feasible for shared RCUZone
+    struct RTableCore
     {
-        ~RcuHashTableCore();
+        ~RTableCore();
 
         std::atomic<size_t> size = 0;
         struct Bucket
@@ -40,9 +40,9 @@ namespace yrcu
         std::atomic<BucketsInfo*> pBucketsInfo = nullptr;
     };
 
-    struct RcuHashTable
+    struct RTable
     {
-        RcuHashTableCore core;
+        RTableCore core;
         RCUZone rcuZone;
     };
 }

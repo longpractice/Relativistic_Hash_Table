@@ -2,6 +2,7 @@
 #include "include/RCUApi.h"
 #include "include/RCUTypes.h"
 #include "include/RCUHashTableApi.h"
+#include "include/RCUHashTableCoreApi.h"
 #include "include/RCUHashTableTypes.h"
 #include <thread>
 #include <cassert>
@@ -24,18 +25,18 @@ namespace yrcu
             return v;
         }
 
-        RcuHashTable::BucketsInfo* allocateAndInitBuckets(size_t nrBucketsPowerOf2)
+        RTableCore::BucketsInfo* allocateAndInitBuckets(size_t nrBucketsPowerOf2)
         {
             assert(nrBucketsPowerOf2 > 0);
             //allocate buckets info and the buckets together, better cache perf
-            size_t allocSize = sizeof(RcuHashTable::BucketsInfo) + nrBucketsPowerOf2 * sizeof(RcuHashTable::Bucket);
+            size_t allocSize = sizeof(RTableCore::BucketsInfo) + nrBucketsPowerOf2 * sizeof(RTableCore::Bucket);
             void* p = malloc(allocSize);
 
-            RcuHashTable::BucketsInfo* pBucketsInfo = new (p) RcuHashTable::BucketsInfo();
+            RTableCore::BucketsInfo* pBucketsInfo = new (p) RTableCore::BucketsInfo();
             pBucketsInfo->nrBucketsPowerOf2 = nrBucketsPowerOf2;
 
-            char* pBucketsChar = (char*)p + sizeof(RcuHashTable::BucketsInfo);
-            RcuHashTable::Bucket* pBuckets = new (pBucketsChar)RcuHashTable::Bucket[nrBucketsPowerOf2];
+            char* pBucketsChar = (char*)p + sizeof(RTableCore::BucketsInfo);
+            RTableCore::Bucket* pBuckets = new (pBucketsChar)RTableCore::Bucket[nrBucketsPowerOf2];
 
             pBucketsInfo->pBuckets = pBuckets;
             //seems that for some implemenation, we cannot assume atomic int is triavially constructable
@@ -45,10 +46,10 @@ namespace yrcu
             return pBucketsInfo;
         }
 
-        void destroyAndFreeBuckets(RcuHashTable::BucketsInfo* p)
+        void destroyAndFreeBuckets(RTableCore::BucketsInfo* p)
         {
-            static_assert(std::is_trivially_destructible_v<RcuHashTable::Bucket>);
-            static_assert(std::is_trivially_destructible_v<RcuHashTable::BucketsInfo>);
+            static_assert(std::is_trivially_destructible_v<RTableCore::Bucket>);
+            static_assert(std::is_trivially_destructible_v<RTableCore::BucketsInfo>);
             free(p);
         }
 
@@ -142,9 +143,9 @@ namespace yrcu
 
         //initialize initial two dst buckets corresponds to one src bucket
         void initTwinDstBuckets(
-            RcuHashTable::Bucket* pSrc,
-            RcuHashTable::Bucket* pDst0,
-            RcuHashTable::Bucket* pDst1,
+            RTableCore::Bucket* pSrc,
+            RTableCore::Bucket* pDst0,
+            RTableCore::Bucket* pDst1,
             size_t bucketDstId0,
             size_t bucketDstId1,
             size_t bucketIdMask
@@ -170,7 +171,7 @@ namespace yrcu
         }
 
         //caller should make sure that pSrc->list.next is not null
-        bool findFirstUnzipPoint(RcuHashTable::Bucket* pSrc, size_t hashMask)
+        bool findFirstUnzipPoint(RTableCore::Bucket* pSrc, size_t hashMask)
         {
             AtomicSingleHead* p = pSrc->list.next.load(std::memory_order_relaxed);
             size_t hashBucketInitial = computeHashBucketId(p, hashMask);
@@ -192,12 +193,12 @@ namespace yrcu
         }
 
         //returns if all finished
-        bool findFirstUnzipStarts(RcuHashTable::BucketsInfo* bucketsInfoOld, size_t bucketMaskNew)
+        bool findFirstUnzipStarts(RTableCore::BucketsInfo* bucketsInfoOld, size_t bucketMaskNew)
         {
             bool allFinished = true;
             for (size_t iHalf = 0; iHalf < bucketsInfoOld->nrBucketsPowerOf2; ++iHalf)
             {
-                RcuHashTable::Bucket* pSrc = bucketsInfoOld->pBuckets + iHalf;
+                RTableCore::Bucket* pSrc = bucketsInfoOld->pBuckets + iHalf;
                 if (pSrc->list.next.load(std::memory_order_relaxed) != nullptr)
                 {
                     bool needUnzip = findFirstUnzipPoint(pSrc, bucketMaskNew);
@@ -211,14 +212,14 @@ namespace yrcu
             return allFinished;
         }
 
-        void unzip(RcuHashTable::BucketsInfo* bucketsInfoOld, size_t bucketMaskNew, RCUZone& rcuZone)
+        void unzip(RTableCore::BucketsInfo* bucketsInfoOld, size_t bucketMaskNew, RCUZone& rcuZone)
         {
             while (true)
             {
                 bool allFinished = true;
                 for (size_t iHalf = 0; iHalf < bucketsInfoOld->nrBucketsPowerOf2; ++iHalf)
                 {
-                    RcuHashTable::Bucket* pSrc = bucketsInfoOld->pBuckets + iHalf;
+                    RTableCore::Bucket* pSrc = bucketsInfoOld->pBuckets + iHalf;
                     if (pSrc->list.next.load(std::memory_order_relaxed) != nullptr)
                     {
                         allFinished = false;
@@ -231,19 +232,19 @@ namespace yrcu
             }
         }
 
-        RcuHashTable::BucketsInfo* expandBucketsByFac2ReturnOld(RcuHashTable& table)
+        RTableCore::BucketsInfo* expandBucketsByFac2ReturnOld(RTableCore& table, RCUZone& zone)
         {
             auto* bucketsInfoOld = table.pBucketsInfo.load(std::memory_order_relaxed);
             size_t nrBucketsOld = bucketsInfoOld->nrBucketsPowerOf2;
             size_t nrBucketsNew = nrBucketsOld * 2;
             size_t bucketMaskNew = nrBucketsNew - 1;
-            RcuHashTable::BucketsInfo* bucketsInfo = allocateAndInitBuckets(nrBucketsNew);
+            RTableCore::BucketsInfo* bucketsInfo = allocateAndInitBuckets(nrBucketsNew);
             for (size_t iHalf = 0; iHalf < nrBucketsOld; ++iHalf)
             {
-                RcuHashTable::Bucket* pSrc = bucketsInfoOld->pBuckets + iHalf;
-                RcuHashTable::Bucket* dst0 = bucketsInfo->pBuckets + iHalf;
+                RTableCore::Bucket* pSrc = bucketsInfoOld->pBuckets + iHalf;
+                RTableCore::Bucket* dst0 = bucketsInfo->pBuckets + iHalf;
                 size_t iSecondHalf = iHalf + nrBucketsOld;
-                RcuHashTable::Bucket* dst1 = bucketsInfo->pBuckets + iSecondHalf;
+                RTableCore::Bucket* dst1 = bucketsInfo->pBuckets + iSecondHalf;
                 initTwinDstBuckets(pSrc, dst0, dst1, iHalf, iSecondHalf, bucketMaskNew);
             }
 
@@ -251,17 +252,17 @@ namespace yrcu
             table.pBucketsInfo.store(bucketsInfo, std::memory_order_release);
             //synchronize so that no one is reading the old buckets
             //since we are going to use the old buckets for unzipping
-            rcuSynchronize(table.rcuZone);
+            rcuSynchronize(zone);
 
             bool noNeedToUnzip = findFirstUnzipStarts(bucketsInfoOld, bucketMaskNew);
             if (noNeedToUnzip)
                 return bucketsInfoOld;
 
-            unzip(bucketsInfoOld, bucketMaskNew, table.rcuZone);
+            unzip(bucketsInfoOld, bucketMaskNew, zone);
             return bucketsInfoOld;
         }
 
-        RcuHashTable::BucketsInfo* shrinkBucketsByFac2ReturnOld(RcuHashTable& table)
+        RTableCore::BucketsInfo* shrinkBucketsByFac2ReturnOld(RTableCore& table, RCUZone& rcuZone)
         {
             auto* bucketsInfoOld = table.pBucketsInfo.load(std::memory_order_relaxed);
             size_t nrBucketsOld = bucketsInfoOld->nrBucketsPowerOf2;
@@ -269,76 +270,85 @@ namespace yrcu
             if (nrBucketsNew == 0)
                 return nullptr;
             size_t bucketMask = nrBucketsNew - 1;
-            RcuHashTable::BucketsInfo* bucketsInfoNew = allocateAndInitBuckets(nrBucketsNew);
+            RTableCore::BucketsInfo* bucketsInfoNew = allocateAndInitBuckets(nrBucketsNew);
             for (size_t iHalf = 0; iHalf < nrBucketsNew; ++iHalf)
             {
-                RcuHashTable::Bucket* pDst = bucketsInfoNew->pBuckets + iHalf;
-                RcuHashTable::Bucket* pSrc0 = bucketsInfoOld->pBuckets + iHalf;
+                RTableCore::Bucket* pDst = bucketsInfoNew->pBuckets + iHalf;
+                RTableCore::Bucket* pSrc0 = bucketsInfoOld->pBuckets + iHalf;
                 size_t iSecondHalf = iHalf + nrBucketsNew;
-                RcuHashTable::Bucket* pSrc1 = bucketsInfoOld->pBuckets + iSecondHalf;
+                RTableCore::Bucket* pSrc1 = bucketsInfoOld->pBuckets + iSecondHalf;
                 shrinkTwoBucketsToOne(&pSrc0->list, &pSrc1->list, &pDst->list);
             }
             table.pBucketsInfo.store(bucketsInfoNew, std::memory_order_release);
-            rcuSynchronize(table.rcuZone);
+            rcuSynchronize(rcuZone);
             return bucketsInfoOld;
         }
     }
 
-    void rcuHashTableInitDetailed(RcuHashTable& table, const RcuHashTableConfig& conf)
+    void rTableCoreInitDetailed(RTableCore& table, const RTableCoreConfig& conf)
     {
-        rcuInitZoneWithBucketCounts(table.rcuZone, conf.nrRcuBucketsForUnregisteredThreads);
         auto nrBucketsPowerOf2 = upperBoundPowerOf2(conf.nrBuckets);
-        RcuHashTable::BucketsInfo* bucketsInfo = allocateAndInitBuckets(nrBucketsPowerOf2);
+        RTableCore::BucketsInfo* bucketsInfo = allocateAndInitBuckets(nrBucketsPowerOf2);
         table.expandFactor = conf.expandFactor;
         table.shrinkFactor = conf.shrinkFactor;
         table.pBucketsInfo.store(bucketsInfo, std::memory_order_relaxed);
     }
 
-    void rcuHashTableInit(RcuHashTable& table, int nrBuckets)
+    void rTableInitDetailed(RTable& table, const RTableConfig& conf)
+    {
+        rcuInitZoneWithBucketCounts(table.rcuZone, conf.nrRcuBucketsForUnregisteredThreads);
+        RTableCoreConfig confCore;
+        confCore.expandFactor = conf.expandFactor;
+        confCore.nrBuckets = conf.nrBuckets;
+        confCore.shrinkFactor = conf.shrinkFactor;
+        rTableCoreInitDetailed(table.core, confCore);
+    }
+
+    void rcuHashTableInit(RTable& table, int nrBuckets)
     {
         auto nrThreadsBuckets = std::thread::hardware_concurrency() * 64;
-        RcuHashTableConfig conf;
+        RTableConfig conf;
         conf.nrBuckets = nrBuckets;
         conf.nrRcuBucketsForUnregisteredThreads = nrThreadsBuckets;
         rcuHashTableInitDetailed(table, conf);
     }
 
     //can only be called if the user is sure that no dup exists
-    void rcuHashTableInsertNoExpand(RcuHashTable& table, RNode* pEntry)
+    void rcuHashTableInsertNoExpand(RTable& table, RNode* pEntry)
     {
-        RcuHashTable::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_relaxed);
+        RTableCore::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_relaxed);
         auto bucketMask = pBucketsInfo->nrBucketsPowerOf2 - 1;
         size_t bucketId = pEntry->hash & bucketMask;
-        RcuHashTable::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
+        RTableCore::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
         pEntry->head.next.store(pBucket->list.next, std::memory_order_release);
         pBucket->list.next.store(&pEntry->head, std::memory_order_release);
         table.size.fetch_add(1, std::memory_order_relaxed);
     }
 
-    int64_t rcuHashTableReadLock(RcuHashTable& table)
+    int64_t rcuHashTableReadLock(RTable& table)
     {
         return rcuReadLock(table.rcuZone);
     }
 
 
-    void rcuHashTableReadUnlock(RcuHashTable& table, int64_t epoch)
+    void rcuHashTableReadUnlock(RTable& table, int64_t epoch)
     {
         rcuReadUnlock(table.rcuZone, epoch);
     }
 
 
-    void rcuHashTableSynchronize(RcuHashTable& table)
+    void rcuHashTableSynchronize(RTable& table)
     {
         rcuSynchronize(table.rcuZone);
     }
 
-    void rcuHashTableExpandBuckets2x(RcuHashTable& table)
+    void rcuHashTableExpandBuckets2x(RTable& table)
     {
         auto pOldInfo = expandBucketsByFac2ReturnOld(table);
         destroyAndFreeBuckets(pOldInfo);
     }
 
-    bool rcuHashTableShrinkBuckets2x(RcuHashTable& table)
+    bool rcuHashTableShrinkBuckets2x(RTable& table)
     {
         auto pOldInfo = shrinkBucketsByFac2ReturnOld(table);
         if (!pOldInfo)
@@ -347,7 +357,7 @@ namespace yrcu
         return true;
     }
 
-    RcuHashTableCore::~RcuHashTableCore()
+    RTableCore::~RTableCore()
     {
         auto* p = pBucketsInfo.load();
         if (p)
@@ -356,13 +366,13 @@ namespace yrcu
 
     namespace rcuHashTableDetail
     {
-        void expandBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RcuHashTable& table)
+        void expandBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RTable& table)
         {
             if ((float)nrElements > table.expandFactor * float(nrBuckets))
                 rcuHashTableExpandBuckets2x(table);
         }
 
-        bool shrinkBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RcuHashTable& table)
+        bool shrinkBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RTable& table)
         {
             if ((float)nrElements < table.shrinkFactor * float(nrBuckets) && nrElements > 128)
                 return rcuHashTableShrinkBuckets2x(table);
