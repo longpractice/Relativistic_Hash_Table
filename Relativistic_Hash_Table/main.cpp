@@ -13,14 +13,12 @@
 #include <array>
 #include <cassert>
 
-
-
 namespace yrcu
 {
     void rcuHashTableQuickExample()
     {
         RTable rTable;
-        rcuHashTableInit(rTable);
+        rTableInit(rTable);
 
         //user data to be tracked by the hash table
         struct MyElement
@@ -38,7 +36,7 @@ namespace yrcu
             myData[item].value = static_cast<int>(item);
             myData[item].valid = true;
             auto hashVal = std::hash<int>{}(item);
-            bool inserted = rcuHashTableTryInsert(rTable, &myData[item].entry, hashVal, [](RNode* p1, RNode* p2)
+            bool inserted = rTableTryInsert(rTable, &myData[item].entry, hashVal, [](RNode* p1, RNode* p2)
                 {
                     return YJ_CONTAINER_OF(p1, MyElement, entry)->value == YJ_CONTAINER_OF(p2, MyElement, entry)->value;
                 });
@@ -52,7 +50,7 @@ namespace yrcu
             {
                 RTableReadLockGuard l(rTable);
                 auto hashVal = std::hash<int>{}(myData[i].value);
-                RNode* pEntry = rcuHashTableFind(rTable, hashVal, [i](const RNode* p)
+                RNode* pEntry = rTableFind(rTable, hashVal, [i](const RNode* p)
                     {
                         return YJ_CONTAINER_OF(p, MyElement, entry)->value == i;
                     });
@@ -80,7 +78,7 @@ namespace yrcu
                 continue;
             auto hash = std::hash<int>{}(myData[i].value);
 
-            RNode* pEntry = rcuHashTableTryDetachAndSynchronize(rTable, hash, [val = myData[i].value](const RNode* p)
+            RNode* pEntry = rTableTryDetachAndSynchronize(rTable, hash, [val = myData[i].value](const RNode* p)
                 {return YJ_CONTAINER_OF(p, MyElement, entry)->value == val; }
             );
             assert(pEntry);
@@ -94,7 +92,7 @@ namespace yrcu
     void printRCUTable(RTable& rTable)
     {
         std::cout << "-------------------\n";
-        auto pBucket = rTable.pBucketsInfo.load();
+        auto pBucket = rTable.core.pBucketsInfo.load();
         for (auto iBucket = 0; iBucket < pBucket->nrBucketsPowerOf2; ++iBucket)
         {
             std::cout << "\nBucket " << iBucket << std::endl;
@@ -115,5 +113,5 @@ int main()
     yrcu::rcuTests();
 
     yrcu::rcuHashTableQuickExample();
-    yrcu::rcuHashTableTests();
+    yrcu::rTableTests();
 }

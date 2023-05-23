@@ -6,8 +6,8 @@ namespace yrcu
 {
     namespace rTableCoreDetail
     {
-        void expandBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RTable& table, RCUZone& zone);
-        bool shrinkBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RTable& table, RCUZone& zone);
+        void expandBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RTableCore& table, RCUZone& zone);
+        bool shrinkBucketsByFac2IfNecessary(size_t nrElements, size_t nrBuckets, RTableCore& table, RCUZone& zone);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -29,7 +29,7 @@ namespace yrcu
     //This enables the caller to do several rcuHashTableTryDetach operations, do one rcuHashTableSynchronize and then
     //do all the garbage collections.
     template<typename UnaryPredicate>
-    RNode* rTableCoreCoreTryDetachNoShrink(RTableCore& table, size_t hashVal, UnaryPredicate matchOp)
+    RNode* rTableCoreTryDetachNoShrink(RTableCore& table, size_t hashVal, UnaryPredicate matchOp)
     {
         RTableCore::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_acquire);
         size_t bucketHash = pBucketsInfo->nrBucketsPowerOf2 - 1;
@@ -56,7 +56,7 @@ namespace yrcu
     template<typename Op>
     RNode* rTableCoreTryDetachAutoShrink(RTableCore& table, size_t hashVal, Op matchOp, RCUZone& zone, bool* outIfAlreadyRcuSynrhonized = nullptr)
     {
-        RNode* p = rcuHashTableTryDetachNoShrink(table, hashVal, std::move(matchOp));
+        RNode* p = rTableCoreTryDetachNoShrink(table, hashVal, std::move(matchOp));
         if (!p)
         {
             if (outIfAlreadyRcuSynrhonized)
@@ -67,7 +67,7 @@ namespace yrcu
         {
             size_t currentSize = table.size.load(std::memory_order_relaxed);
             size_t nrBuckets = table.pBucketsInfo.load(std::memory_order_acquire)->nrBucketsPowerOf2;
-            bool ifAlreadyRcuSynrhonized = coreRTableDetail::shrinkBucketsByFac2IfNecessary(currentSize, nrBuckets, table, zone);
+            bool ifAlreadyRcuSynrhonized = rTableCoreDetail::shrinkBucketsByFac2IfNecessary(currentSize, nrBuckets, table, zone);
             if (outIfAlreadyRcuSynrhonized)
                 *outIfAlreadyRcuSynrhonized = ifAlreadyRcuSynrhonized;
             return p;
@@ -100,11 +100,11 @@ namespace yrcu
     }
 
     //can only be called if the user is sure that no dup exists
-    void rTableCoreInsertNoExpand(RTableCore& table, RCUZone& zone, RNode* pEntry);
+    void rTableCoreInsertNoExpand(RTableCore& table, RNode* pEntry);
 
     void rTableCoreExpandBuckets2x(RTableCore& table, RCUZone& zone);
 
-    bool rTableCoreShrinkBuckets2x(RTable& table, RCUZone& zone);
+    bool rTableCoreShrinkBuckets2x(RTableCore& table, RCUZone& zone);
 
     //-----------------------------------------------------------------------------------------------//
 
@@ -142,12 +142,12 @@ namespace yrcu
     template<typename Op>
     bool rTableCoreTryInsert(RTableCore& table, RCUZone& rcuZone, RNode* pEntry, size_t hashVal, Op matchOp)
     {
-        bool inserted = rcuHashTableTryInsertNoExpand(table, pEntry, hashVal, matchOp);
+        bool inserted = rTableCoreTryInsertNoExpand(table, pEntry, hashVal, matchOp);
         if (!inserted)
             return false;
         auto currentSize = table.size.load(std::memory_order_relaxed);
         size_t nrBuckets = table.pBucketsInfo.load(std::memory_order_acquire)->nrBucketsPowerOf2;
-        rcuHashTableDetail::expandBucketsByFac2IfNecessary(currentSize, nrBuckets, table);
+        rTableCoreDetail::expandBucketsByFac2IfNecessary(currentSize, nrBuckets, table, rcuZone);
         return true;
     }
 
@@ -156,10 +156,10 @@ namespace yrcu
     //for.
     //rcuSynchronize is called internally and it is safe to delete resource of RNode.
     template<typename Op>
-    RNode* rTableCoreTryDetachAndSynchronize(RTable& table, RCUZone& rcuZone, size_t hashVal, Op matchOp)
+    RNode* rTableCoreTryDetachAndSynchronize(RTableCore& table, RCUZone& rcuZone, size_t hashVal, Op matchOp)
     {
         bool ifAlreadyRcuSynchronized = false;
-        RNode* pEntry = rcuHashTableTryDetachAutoShrink(table, hashVal, matchOp, &ifAlreadyRcuSynchronized);
+        RNode* pEntry = rTableCoreTryDetachAutoShrink(table, hashVal, matchOp, rcuZone, &ifAlreadyRcuSynchronized);
         if (pEntry == nullptr)
             return pEntry;
         if (!ifAlreadyRcuSynchronized)

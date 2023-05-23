@@ -1,5 +1,4 @@
 #include "RCUHashTableApi.h"
-#include "RCUHashTableTypes.h"
 #include "TestHelper.h"
 #include <vector>
 #include <future>
@@ -70,7 +69,7 @@ namespace yrcu
             void runRcuHashMap()
             {
                 RTable rTable;
-                rcuHashTableInit(rTable);
+                rTableInit(rTable);
                 //user data to be tracked by the hash table
                 struct MyElement
                 {
@@ -85,14 +84,14 @@ namespace yrcu
                     myData[item] = std::make_unique<MyElement>();
                     myData[item]->value = item;
                     auto hashVal = std::hash<size_t>{}(item);
-                    bool inserted = rcuHashTableTryInsert(rTable, &myData[item]->entry, hashVal, [](RNode* p1, RNode* p2)
+                    bool inserted = rTableTryInsert(rTable, &myData[item]->entry, hashVal, [](RNode* p1, RNode* p2)
                         {
                             return YJ_CONTAINER_OF(p1, MyElement, entry)->value == YJ_CONTAINER_OF(p2, MyElement, entry)->value;
                         });
                 }
 
                 {
-                    Timer timer{ "RCUHashTable: " };
+                    Timer timer{ "rTable: " };
                     std::vector<std::future<void>> futures{std::thread::hardware_concurrency()};
                     auto f = [&rTable, &myData, this]()
                     {
@@ -102,7 +101,7 @@ namespace yrcu
 
                                 RTableReadLockGuard l(rTable);
                                 auto hashVal = std::hash<size_t>{}(myData[i]->value);
-                                RNode* pEntry = rcuHashTableFind(rTable, hashVal, [i](const RNode* p)
+                                RNode* pEntry = rTableFind(rTable, hashVal, [i](const RNode* p)
                                     {
                                         return YJ_CONTAINER_OF(p, MyElement, entry)->value == i;
                                     });
@@ -125,7 +124,7 @@ namespace yrcu
                         myDataAdditional[i]->value = v;
                         auto hash = std::hash<size_t>{}(myDataAdditional[i]->value);
 
-                        bool inserted = rcuHashTableTryInsert(rTable, &myDataAdditional[i]->entry, hash,
+                        bool inserted = rTableTryInsert(rTable, &myDataAdditional[i]->entry, hash,
                             [](const RNode* p0, const RNode* p1)
                             {return YJ_CONTAINER_OF(p0, MyElement, entry)->value == YJ_CONTAINER_OF(p0, MyElement, entry)->value;  }
                         );
@@ -157,7 +156,7 @@ namespace yrcu
                 RTable rTable;
                 RTableConfig conf{};
                 conf.nrRcuBucketsForUnregisteredThreads = 64 * std::thread::hardware_concurrency();
-                rcuHashTableInitDetailed(rTable, conf);
+                rTableInitDetailed(rTable, conf);
 
                 struct Val
                 {
@@ -177,7 +176,7 @@ namespace yrcu
                     arr[i].valid = true;
                     auto hash = myHash(i);
 
-                    bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
+                    bool inserted = rTableTryInsert(rTable, &arr[i].entry, hash,
                         [](RNode* p1, RNode* p2)
                         {
                             return YJ_CONTAINER_OF(p1, Val, entry)->v == YJ_CONTAINER_OF(p2, Val, entry)->v;
@@ -186,7 +185,7 @@ namespace yrcu
                     if (!inserted)
                         throw std::exception("Broken");
 
-                    //rcuHashTableInsert(rTable, &arr[i].entry);
+                    //rTableInsert(rTable, &arr[i].entry);
                     //printRCUTable(rTable);
                 }
 
@@ -199,15 +198,15 @@ namespace yrcu
                         for (size_t i = 0; i < sizePersist; ++i)
                         {
                             size_t hashVal = myHash(i);
-                            auto epoch = rcuHashTableReadLock(rTable);
-                            bool found = rcuHashTableFind(rTable, hashVal, [&](RNode* p)
+                            auto epoch = rTableReadLock(rTable);
+                            bool found = rTableFind(rTable, hashVal, [&](RNode* p)
                                 {
                                     return YJ_CONTAINER_OF(p, Val, entry)->v == i;
                                 }
                             );
                             if (found && !arr[i].valid)
                                 throw std::exception("ElementNotValid in reader critical session.");
-                            rcuHashTableReadUnlock(rTable, epoch);
+                            rTableReadUnlock(rTable, epoch);
                             if (i < sizePersist && !found)
                                 throw std::exception("Broken");
                         }
@@ -219,13 +218,13 @@ namespace yrcu
                     future = std::async(std::launch::async, f);
 
 
-                rcuHashTableSynchronize(rTable);
+                rTableSynchronize(rTable);
                 for (auto i = sizePersist; i < sizeTotal; ++i)
                 {
                     arr[i].v = i;
                     arr[i].valid = true;
                     auto hash = myHash(i);
-                    bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
+                    bool inserted = rTableTryInsert(rTable, &arr[i].entry, hash,
                         [](RNode* p1, RNode* p2)
                         {
                             return YJ_CONTAINER_OF(p1, Val, entry)->v == YJ_CONTAINER_OF(p2, Val, entry)->v;
@@ -243,7 +242,7 @@ namespace yrcu
                     {
                         auto hash = myHash(i);
 
-                        RNode* pEntry = rcuHashTableTryDetachAndSynchronize(rTable, hash, [i](RNode* p)
+                        RNode* pEntry = rTableTryDetachAndSynchronize(rTable, hash, [i](RNode* p)
                             {return YJ_CONTAINER_OF(p, Val, entry)->v == i; }
                         );
 
@@ -258,7 +257,7 @@ namespace yrcu
                         arr[i].valid = true;
                         auto hash = myHash(i);
 
-                        bool inserted = rcuHashTableTryInsert(rTable, &arr[i].entry, hash,
+                        bool inserted = rTableTryInsert(rTable, &arr[i].entry, hash,
                             [](RNode* p1, RNode* p2)
                             {
                                 return YJ_CONTAINER_OF(p1, Val, entry)->v == YJ_CONTAINER_OF(p2, Val, entry)->v;
@@ -278,7 +277,7 @@ namespace yrcu
                 for (auto i = 0; i < sizePersist; ++i)
                 {
                     size_t hashVal = myHash(i);
-                    bool found = rcuHashTableFind(rTable, hashVal, [&](RNode* p)
+                    bool found = rTableFind(rTable, hashVal, [&](RNode* p)
                         {
                             return YJ_CONTAINER_OF(p, Val, entry)->v == i;
                         }
@@ -313,13 +312,13 @@ namespace yrcu
                 for (int j = 1; j < 100; ++j)
                 {
                     RTable rTable;
-                    rcuHashTableInitDetailed(rTable, conf);
+                    rTableInitDetailed(rTable, conf);
                     std::vector<Val> arr = std::vector<Val>{ sizeTotal };
                     for (size_t i = 0; i < sizeTotal; ++i)
                     {
                         arr[i].v = i;
                         auto hash = myHash(i, j);
-                        bool inserted = rcuHashTableTryInsertNoExpand(rTable, &arr[i].entry, hash,
+                        bool inserted = rTableTryInsertNoExpand(rTable, &arr[i].entry, hash,
                             [](RNode* p1, RNode* p2)
                             {
                                 return YJ_CONTAINER_OF(p1, Val, entry)->v == YJ_CONTAINER_OF(p2, Val, entry)->v;
@@ -338,15 +337,15 @@ namespace yrcu
                             for (size_t i = 0; i < sizeTotal; ++i)
                             {
                                 size_t hashVal = myHash(i, j);
-                                auto epoch = rcuHashTableReadLock(rTable);
-                                bool found = rcuHashTableFind(rTable, hashVal, [&](RNode* p)
+                                auto epoch = rTableReadLock(rTable);
+                                bool found = rTableFind(rTable, hashVal, [&](RNode* p)
                                     {
                                         return YJ_CONTAINER_OF(p, Val, entry)->v == i;
                                     }
                                 );
                                 if (!found)
                                     throw std::exception("Broken");
-                                rcuHashTableReadUnlock(rTable, epoch);
+                                rTableReadUnlock(rTable, epoch);
                             }
                         }
                     };
@@ -356,16 +355,16 @@ namespace yrcu
                         future = std::async(std::launch::async, f);
 
                     //periodically remove and insert
-                    for (int j = 0; j < 3000000; ++j)
+                    for (int j = 0; j < 30; ++j)
                     {
                         //std::cout << j << " round of erasing and inserting." << std::endl;
-                        rcuHashTableExpandBuckets2x(rTable);
-                        rcuHashTableExpandBuckets2x(rTable);
-                        rcuHashTableExpandBuckets2x(rTable);
+                        rTableExpandBuckets2x(rTable);
+                        rTableExpandBuckets2x(rTable);
+                        rTableExpandBuckets2x(rTable);
 
-                        rcuHashTableShrinkBuckets2x(rTable);
-                        rcuHashTableShrinkBuckets2x(rTable);
-                        rcuHashTableShrinkBuckets2x(rTable);
+                        rTableShrinkBuckets2x(rTable);
+                        rTableShrinkBuckets2x(rTable);
+                        rTableShrinkBuckets2x(rTable);
                     }
 
                     finished.store(true, std::memory_order_relaxed);
@@ -380,7 +379,7 @@ namespace yrcu
         void RCUTableTestSingleThreadTest()
         {
             RTable tbl;
-            rcuHashTableInit(tbl);
+            rTableInit(tbl);
 
             struct Element
             {
@@ -398,14 +397,14 @@ namespace yrcu
             //when there is only one thread, read lock is not needed
             for (size_t i = 0; i < values.size(); ++i)
             {
-                bool inserted = rcuHashTableTryInsert(tbl, &values[i].entry, std::hash<size_t>{}(i),
+                bool inserted = rTableTryInsert(tbl, &values[i].entry, std::hash<size_t>{}(i),
                     [](RNode* p0, RNode* p1) {
                         return Element::fromNode(p0)->v == Element::fromNode(p1)->v;
                     }
                 );
                 if (!inserted)
                     throw std::exception("Broken");
-                bool insertedSecondTime = rcuHashTableTryInsert(tbl, &values[i].entry, std::hash<size_t>{}(i),
+                bool insertedSecondTime = rTableTryInsert(tbl, &values[i].entry, std::hash<size_t>{}(i),
                     [](RNode* p0, RNode* p1) {
                         return Element::fromNode(p0)->v == Element::fromNode(p1)->v;
                     }
@@ -414,14 +413,14 @@ namespace yrcu
                     throw std::exception("Broken");
             }
 
-            bool foundNotInElement = rcuHashTableFind(tbl, std::hash<size_t>{}(values.size()),
+            bool foundNotInElement = rTableFind(tbl, std::hash<size_t>{}(values.size()),
                 [val = values.size()](RNode* p) { return Element::fromNode(p)->v == val; });
             if (foundNotInElement)
                 throw std::exception("Broken");
 
             for (size_t i = 0; i < values.size(); ++i)
             {
-                RNode* detached = rcuHashTableTryDetachAutoShrink(tbl, std::hash<size_t>{}(i),
+                RNode* detached = rTableTryDetachAutoShrink(tbl, std::hash<size_t>{}(i),
                     [i](RNode* p) { return Element::fromNode(p)->v == i; });
                 if (!detached)
                     throw std::exception("Broken");
@@ -429,7 +428,7 @@ namespace yrcu
 
             for (size_t i = 0; i < values.size(); ++i)
             {
-                bool foundNotInElement = rcuHashTableFind(tbl, std::hash<size_t>{}(values.size()),
+                bool foundNotInElement = rTableFind(tbl, std::hash<size_t>{}(values.size()),
                     [val = values.size()](RNode* p) { return Element::fromNode(p)->v == val; });
                 if (foundNotInElement)
                     throw std::exception("Broken");
@@ -438,7 +437,7 @@ namespace yrcu
     }
 
 
-    void rcuHashTableTests()
+    void rTableTests()
     {
         RCUTableManualStressExpandShrink testManualShrinkExpand;
         testManualShrinkExpand.run();

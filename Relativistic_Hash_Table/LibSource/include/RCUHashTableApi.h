@@ -39,7 +39,7 @@ namespace yrcu
     template<typename Op>
     bool rTableTryInsertNoExpand(RTable& table, RNode* pEntry, size_t hashVal, Op matchOp)
     {
-        return rTableCoreTryInsertNoExpand(table.core, pEntry, hashVal, matchOp, table.rcuZone);
+        return rTableCoreTryInsertNoExpand(table.core, pEntry, hashVal, matchOp);
     }
 
     //it is allowed to have multiple detach before a single synchronize operation
@@ -94,17 +94,7 @@ namespace yrcu
     template<typename Op>
     RNode* rTableFind(const RTable& table, size_t hashVal, Op matchOp)
     {
-        RTableCore::BucketsInfo* pBucketsInfo = table.pBucketsInfo.load(std::memory_order_acquire);
-        size_t bucketHash = pBucketsInfo->nrBucketsPowerOf2 - 1;
-        auto bucketId = hashVal & bucketHash;
-        RTableCore::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
-        for (auto p = pBucket->list.next.load(std::memory_order_acquire); p != nullptr; p = p->next.load(std::memory_order_acquire))
-        {
-            RNode* pEntry = YJ_CONTAINER_OF(p, RNode, head);
-            if (pEntry->hash == hashVal && matchOp(pEntry))
-                return pEntry;
-        }
-        return nullptr;
+        return rTableCoreFind(table.core, hashVal, matchOp);
     }
 
     //Write operation: all writers must be serialized
@@ -114,13 +104,7 @@ namespace yrcu
     template<typename Op>
     bool rTableTryInsert(RTable& table, RNode* pEntry, size_t hashVal, Op matchOp)
     {
-        bool inserted = rTableTryInsertNoExpand(table, pEntry, hashVal, matchOp);
-        if (!inserted)
-            return false;
-        auto currentSize = table.size.load(std::memory_order_relaxed);
-        size_t nrBuckets = table.pBucketsInfo.load(std::memory_order_acquire)->nrBucketsPowerOf2;
-        rTableDetail::expandBucketsByFac2IfNecessary(currentSize, nrBuckets, table);
-        return true;
+        return rTableCoreTryInsert(table.core, table.rcuZone, pEntry, hashVal, matchOp);
     }
 
     //Write operation: all writers must be serialized
@@ -130,13 +114,7 @@ namespace yrcu
     template<typename Op>
     RNode* rTableTryDetachAndSynchronize(RTable& table, size_t hashVal, Op matchOp)
     {
-        bool ifAlreadyRcuSynchronized = false;
-        RNode* pEntry = rTableTryDetachAutoShrink(table, hashVal, matchOp, &ifAlreadyRcuSynchronized);
-        if (pEntry == nullptr)
-            return pEntry;
-        if (!ifAlreadyRcuSynchronized)
-            rcuSynchronize(table.rcuZone);
-        return pEntry;
+        return rTableCoreTryDetachAndSynchronize(table.core, table.rcuZone, hashVal, matchOp);
     }
 }
 
