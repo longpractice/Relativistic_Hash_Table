@@ -1,5 +1,5 @@
 
-Welcome to use, comment, report bugs and contribute to this new library, I will usually reply within 3 days! I will also constantly add more and more tests to make this multi-threading lib reliable.
+Welcome to use, comment, report bugs and contribute to this new library, I will usually reply fast. The library here is well tested.
 
 
 Implements a relativistic hash table ( `RcuHashTable` ) using epoch-based-RCU in C++.
@@ -32,28 +32,31 @@ See `void rcuHashTableQuickExample()` in main.cpp.
 
 An `RCUZone` defines a single RCU synchronization unit. It could be used by the user to synchronize any RCU data structures. Reader threads (usually from a thread pool) could optionally be registered before any `RCUZone` initialization. Registered threads have no contentions with each other. Unregistered reader threads fallbacks to thread-id hashing based RCU reader count with minimal contention. 
 
-The `RCUHashTable` implements the relativistic hash table which links
+The `RTable` implements the relativistic hash table which links
 ```
-struct RcuHashTableEntry
+struct RTableEntry
 {
     size_t hash;
     AtomicSingleHead head;
 };
 ```
-The user could embed these entries into their data structure (C manner). C++ users could define "nodes" to point to their own data structures(C++ manner):
+The user could embed these entries into their data structure. A non-intrusive manner could define "nodes" to point to their own data structures by defining:
 
 ```
-struct RcuHashTableEntryAdapt
+struct RTableEntryAdapt
 {
     MyData* pMyData;
-    RcuHashTableEntry entry;
+    RTableEntry entry;
 
-    static MyData* rcuHashTableEntryToPtrMyData(RcuHashTableEntry* pEntry)   
+    static MyData* rTableEntryToPtrMyData(RTableEntry* pEntry)   
     {
-        return CONTAINER_OF(pEntry, RcuHashTableEntryAdapt, entry)->pMyData;
+        return CONTAINER_OF(pEntry, RTableEntryAdapt, entry)->pMyData;
     } 
 };
 ```
+
+A `RTable` has a `RCUZone` as its member. However, sometimes, it might be beneficial for the user to use one `RCUZone` to protect multiple data structures, and `RTableCore` does not include a `RCUZone` as member and 
+the user can use an external `RCUZone` which can be shared by multiple pieces of data.
 
 ---
 
