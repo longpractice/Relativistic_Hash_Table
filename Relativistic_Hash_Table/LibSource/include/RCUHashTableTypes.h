@@ -15,8 +15,11 @@ namespace yrcu
         AtomicSingleHead head;
     };
 
-    struct RcuHashTable
+    //RcuHashTableCore does not include the RCUZone and thus is feasible for shared RCUZone
+    struct RcuHashTableCore
     {
+        ~RcuHashTableCore();
+
         std::atomic<size_t> size = 0;
         struct Bucket
         {
@@ -34,9 +37,12 @@ namespace yrcu
         //shrink when element/buckets-count is less than this factor
         float shrinkFactor = 8.f;
 
-        RCUZone rcuZone;
         std::atomic<BucketsInfo*> pBucketsInfo = nullptr;
+    };
 
-        ~RcuHashTable();
+    struct RcuHashTable
+    {
+        RcuHashTableCore core;
+        RCUZone rcuZone;
     };
 }

@@ -347,7 +347,7 @@ namespace yrcu
         return true;
     }
 
-    RcuHashTable::~RcuHashTable()
+    RcuHashTableCore::~RcuHashTableCore()
     {
         auto* p = pBucketsInfo.load();
         if (p)
