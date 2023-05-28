@@ -23,13 +23,79 @@ inline void atomicSlistInit(AtomicSingleHead* list)
 
 // Write operation(must be serialized with other write operations)
 // link elem to the front of the list
-inline void atomicSlistInsertFront(AtomicSingleHead* list, AtomicSingleHead* elem)
+inline void atomicSlistPrepend(AtomicSingleHead* list, AtomicSingleHead* newElem)
 {
 	// Since writers are serialized, inside writing apis we load atomic with
 	// mem-order-relaxed. But since there might be concurrent readers, inside
 	// writing apis we store with mem-order-release.
 	AtomicSingleHead* pNext = list->next.load(std::memory_order_relaxed);
-	elem->next.store(pNext, std::memory_order_release);
+	newElem->next.store(pNext, std::memory_order_release);
+	list->next.store(newElem, std::memory_order_release);
+}
+
+// Append the element to the end of the list
+// Note that this will cause a traversal of the list
+inline void atomicSlistAppend(AtomicSingleHead* list, AtomicSingleHead* newElem)
+{
+	AtomicSingleHead* p = list;
+	AtomicSingleHead* pNext = p->next.load(std::memory_order_relaxed);
+	while (pNext)
+	{
+		p = pNext;
+		pNext = p->next.load(std::memory_order_relaxed);
+	}
+
+	newElem->next.store(nullptr, std::memory_order_release);
+	p->next.store(newElem, std::memory_order_release);
+}
+
+// Write operation(must be serialized with other write operations)
+// Insert the element to the front of the list, if the element is not found from list.
+// Note that there is a slight different from combining find and insertFront
+// since this function is serialized with other writers, we can relax some load operations
+// inside.
+template<typename BinaryPredict>
+inline bool atomicSlistPrependIfNoMatch(
+		AtomicSingleHead* list,
+		AtomicSingleHead* newElem,
+		BinaryPredict binaryPredict)
+{
+	AtomicSingleHead* pFirst = list->next.load(std::memory_order_relaxed);
+	AtomicSingleHead* p;
+	for (p = pFirst; p != nullptr; p = p->next.load(std::memory_order_relaxed))
+		if (binaryPredict(p, newElem))
+			return false;
+	// put the new element in the front
+	newElem->next.store(pFirst, std::memory_order_release);
+	list->next.store(newElem, std::memory_order_release);
+	return true;
+}
+
+
+// Write operation(must be serialized with other write operations)
+// Append the element to the end of the list, if the element is not found from list.
+// Note that there is a slight different from combining find and insertFront
+// since this function is serialized with other writers, we can relax some load operations
+// inside.
+template<typename BinaryPredict>
+inline bool atomicSlistAppendIfNoMatch(
+		AtomicSingleHead* list,
+		AtomicSingleHead* newElem,
+		BinaryPredict binaryPredict)
+{
+	AtomicSingleHead* p = list;
+	AtomicSingleHead* pNext = p->next.load(std::memory_order_relaxed);
+
+	while (pNext)
+	{
+		if (binaryPredict(p, newElem))
+			return false;
+		p = pNext;
+		pNext = p->next.load(std::memory_order_relaxed);
+	}
+	newElem->next.store(nullptr, std::memory_order_release);
+	p->next.store(newElem, std::memory_order_release);
+	return true;
 }
 
 // Find first element that predict(AtomicSingleHead*) returns true.
