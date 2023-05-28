@@ -1,8 +1,7 @@
 #include "AtomicSinglyLinkedListTypes.h"
 
-#define YJ_OFFSET_OF(Type, Field) __builtin_offsetof(Type, Field)
-#define YJ_CONTAINER_OF(ptr, type, member) \
-	((type*)((char*)ptr - YJ_OFFSET_OF(type, member)))
+#define YJ_OFFSET_OF(Type, Field)					 __builtin_offsetof(Type, Field)
+#define YJ_CONTAINER_OF(ptr, type, member) ((type*)((char*)ptr - YJ_OFFSET_OF(type, member)))
 
 namespace yrcu
 {
@@ -37,12 +36,9 @@ inline void atomicSlistInsertFront(AtomicSingleHead* list, AtomicSingleHead* ele
 // UnaryPredict is of signature `bool(AtomicSingleHead*)`.
 // If none is find, nullptr is returned
 template<typename UnaryPredict>
-AtomicSingleHead* atomicSlistFindIf(
-		AtomicSingleHead* list,
-		UnaryPredict predict)
+AtomicSingleHead* atomicSlistFindIf(AtomicSingleHead* list, UnaryPredict predict)
 {
-	for (AtomicSingleHead* p = list->next.load(std::memory_order_acquire);
-			 p != nullptr;
+	for (AtomicSingleHead* p = list->next.load(std::memory_order_acquire); p != nullptr;
 			 p = p->next.load(std::memory_order_acquire))
 		if (predict(p))
 			return p;
@@ -51,9 +47,7 @@ AtomicSingleHead* atomicSlistFindIf(
 
 // Try find the first element inside
 template<typename UnaryPredict>
-AtomicSingleHead* atomicSlistRemoveIf(
-		AtomicSingleHead* list,
-		UnaryPredict predict)
+AtomicSingleHead* atomicSlistRemoveIf(AtomicSingleHead* list, UnaryPredict predict)
 {
 	AtomicSingleHead* pLast = list;
 	AtomicSingleHead* p = pLast->next.load(std::memory_order_relaxed);
@@ -61,8 +55,7 @@ AtomicSingleHead* atomicSlistRemoveIf(
 	{
 		if (predict(p))
 		{
-			pLast->next.store(
-					p->next.load(std::memory_order_relaxed), std::memory_order_release);
+			pLast->next.store(p->next.load(std::memory_order_relaxed), std::memory_order_release);
 			break;
 		}
 		pLast = p;
@@ -73,9 +66,7 @@ AtomicSingleHead* atomicSlistRemoveIf(
 
 // Head will be returned if it exists in the list
 // Otherwise, nullptr is returned
-inline AtomicSingleHead* atomicSlistRemove(
-		AtomicSingleHead* list,
-		AtomicSingleHead* head)
+inline AtomicSingleHead* atomicSlistRemove(AtomicSingleHead* list, AtomicSingleHead* head)
 {
 	AtomicSingleHead* pLast = list;
 	AtomicSingleHead* p = pLast->next.load(std::memory_order_relaxed);
@@ -84,8 +75,7 @@ inline AtomicSingleHead* atomicSlistRemove(
 	{
 		if (p == head)
 		{
-			pLast->next.store(
-					p->next.load(std::memory_order_relaxed), std::memory_order_release);
+			pLast->next.store(p->next.load(std::memory_order_relaxed), std::memory_order_release);
 			break;
 		}
 		pLast = p;

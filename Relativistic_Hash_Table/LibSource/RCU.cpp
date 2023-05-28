@@ -1,5 +1,5 @@
-// Minimum_Userspace_RCU.cpp : This file contains the 'main' function. Program execution begins and
-// ends there.
+// Minimum_Userspace_RCU.cpp : This file contains the 'main' function. Program
+// execution begins and ends there.
 //
 #include <atomic>
 #include <thread>
@@ -45,7 +45,8 @@ bool rcuRegisterReaderThread()
 		return false;	 // already registered
 	auto bucketId = RCUReaderThreadRegistry::nextBucketId++;
 	if (bucketId >= RCUReaderThreadRegistry::nrNonOverlappingBucketCount)
-		return false;	 // too many threads already registered, fail this registration
+		return false;	 // too many threads already registered, fail this
+									 // registration
 	RCUReaderThreadRegistry::tlsReaderBucketId = bucketId;
 	return true;
 }
@@ -100,7 +101,8 @@ int64_t rcuReadLock(RCUZone& zone)
 	auto threadBucketId = fetchThreadBucketId(zone);
 	while (true)
 	{
-		// use relaxed here since we are going to do the acquire for the revalidation
+		// use relaxed here since we are going to do the acquire for the
+		// revalidation
 		int64_t epochId = zone.epochLatest.load(std::memory_order_relaxed);
 		auto epochRowId = epochId & c_epochMask;
 		std::atomic<int>& count = zone.epochsRing[epochRowId].pBuckets[threadBucketId].count;

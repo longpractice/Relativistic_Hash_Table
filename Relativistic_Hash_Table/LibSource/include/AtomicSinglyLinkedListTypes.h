@@ -4,8 +4,8 @@
 
 namespace yrcu
 {
-    struct AtomicSingleHead
-    {
-        std::atomic<AtomicSingleHead*> next;
-    };
-}
+struct AtomicSingleHead
+{
+	std::atomic<AtomicSingleHead*> next;
+};
+}	 // namespace yrcu
