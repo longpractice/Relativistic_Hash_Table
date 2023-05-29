@@ -44,7 +44,8 @@ inline void atomicSlistAppend(AtomicSingleHead* list, AtomicSingleHead* newElem)
 		p = pNext;
 		pNext = p->next.load(std::memory_order_relaxed);
 	}
-
+	// put the new element at the end
+	// order of the lines below matters since there might be concurrent readers
 	newElem->next.store(nullptr, std::memory_order_release);
 	p->next.store(newElem, std::memory_order_release);
 }
@@ -66,6 +67,7 @@ inline bool atomicSlistPrependIfNoMatch(
 		if (binaryPredict(p, newElem))
 			return false;
 	// put the new element in the front
+	// order of the lines below matters since there might be concurrent readers
 	newElem->next.store(pFirst, std::memory_order_release);
 	list->next.store(newElem, std::memory_order_release);
 	return true;
@@ -93,6 +95,7 @@ inline bool atomicSlistAppendIfNoMatch(
 		p = pNext;
 		pNext = p->next.load(std::memory_order_relaxed);
 	}
+	//order of lines below matters, due to concurrent readers
 	newElem->next.store(nullptr, std::memory_order_release);
 	p->next.store(newElem, std::memory_order_release);
 	return true;
@@ -111,7 +114,10 @@ AtomicSingleHead* atomicSlistFindIf(AtomicSingleHead* list, UnaryPredict predict
 	return nullptr;
 }
 
-// Try find the first element inside
+// Try find the first element that matches the predict and unlink it from the list
+// Note that since there might be concurrent readers going on,
+// the caller needs to wait for all the readers to expire before touching returned head's next member
+// or dispose it.
 template<typename UnaryPredict>
 AtomicSingleHead* atomicSlistRemoveIf(AtomicSingleHead* list, UnaryPredict predict)
 {

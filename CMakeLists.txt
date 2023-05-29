@@ -12,11 +12,16 @@ add_executable(Relativistic_Hash_Table
 
 	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/RCUTypes.h
 	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/RCUApi.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/RCUHashTableApi.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/RCUHashTableCoreApi.h
+
 	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/RCUHashTableTypes.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/RCUHashTableCoreApi.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/RCUHashTableApi.h
+	
 	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/AtomicSinglyLinkedListTypes.h
 	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/AtomicSinglyLinkedListApi.h
+
+	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/AtomicDoublyLinkedListTypes
+	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/LibSource/include/AtomicDoublyLinkedListApi.h
 
 	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/TestsAndExamples/RCUTableTests.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Relativistic_Hash_Table/TestsAndExamples/RCUTableTests.h
