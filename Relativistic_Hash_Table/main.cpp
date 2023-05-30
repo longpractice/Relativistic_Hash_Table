@@ -105,7 +105,7 @@ void printRCUTable(RTable& rTable)
 		std::cout << "\nBucket " << iBucket << std::endl;
 		auto pSrc = pBucket->pBuckets + iBucket;
 
-		for (auto p = pSrc->list.next.load(std::memory_order_relaxed); p != nullptr;
+		for (auto p = pSrc->list.head.next.load(std::memory_order_relaxed); p != nullptr;
 				 p = p->next.load(std::memory_order_relaxed))
 		{
 			size_t hashV = YJ_CONTAINER_OF(p, RNode, head)->hash;

@@ -1,12 +1,12 @@
 #pragma once
-#include "AtomicSinglyLinkedListTypes.h"
+#include "RcuSinglyLinkedListTypes.h"
 #include "RCUTypes.h"
 namespace yrcu
 {
 struct RNode
 {
 	size_t hash;
-	AtomicSingleHead head;
+	RcuSlistHead head;
 };
 
 // RTableCore does not include the RCUZone and thus is feasible for shared RCUZone
@@ -17,7 +17,7 @@ struct RTableCore
 	std::atomic<size_t> size = 0;
 	struct Bucket
 	{
-		AtomicSingleHead list;
+		RcuSlist list;
 	};
 
 	struct BucketsInfo

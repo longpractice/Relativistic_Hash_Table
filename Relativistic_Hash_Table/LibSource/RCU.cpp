@@ -1,7 +1,6 @@
 // Minimum_Userspace_RCU.cpp : This file contains the 'main' function. Program
 // execution begins and ends there.
 //
-#include <atomic>
 #include <thread>
 
 #include "RCUApi.h"
