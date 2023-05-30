@@ -40,10 +40,10 @@ namespace
 		RTableCore::Bucket* pBuckets = new (pBucketsChar) RTableCore::Bucket[nrBucketsPowerOf2];
 
 		pBucketsInfo->pBuckets = pBuckets;
-		// seems that for some implemenation, we cannot assume atomic int is
+		// seems that for some implemenation, we cannot assume std::atomic int is
 		// triavially constructable otherwise, we should just do a memset to 0;
 		for (int iBucket = 0; iBucket < nrBucketsPowerOf2; ++iBucket)
-			(pBuckets + iBucket)->list.next.store(nullptr, std::memory_order_release);
+			(pBuckets + iBucket)->list.head.next.store(nullptr, std::memory_order_release);
 		return pBucketsInfo;
 	}
 
@@ -58,17 +58,17 @@ namespace
 	// pSrc1->next is pointing to the 0th element of the src1
 	// pSrc and pSrc1 are not nullptr themselves
 	void
-	shrinkTwoBucketsToOne(AtomicSingleHead* pSrc0, AtomicSingleHead* pSrc1, AtomicSingleHead* pDst)
+	shrinkTwoBucketsToOne(RcuSlist* pSrc0, RcuSlist* pSrc1, RcuSlist* pDst)
 	{
-		AtomicSingleHead* pSrc0First = pSrc0->next.load(std::memory_order_relaxed);
-		AtomicSingleHead* pSrc1First = pSrc1->next.load(std::memory_order_relaxed);
+		RcuSlistHead* pSrc0First = pSrc0->head.next.load(std::memory_order_relaxed);
+		RcuSlistHead* pSrc1First = pSrc1->head.next.load(std::memory_order_relaxed);
 
 		// Splice list 1 onto the end of list 0, and then let pDst point to the
 		// first element of list 0. This would mean that we need to walk list 0 to
 		// find its tail. But we could skip that if list 1 is empty.
 		if (pSrc1First == nullptr)
 		{
-			pDst->next.store(pSrc0First, std::memory_order_release);
+			pDst->head.next.store(pSrc0First, std::memory_order_release);
 			return;
 		}
 
@@ -76,31 +76,31 @@ namespace
 		// of list 1.
 		if (pSrc0First == nullptr)
 		{
-			pDst->next.store(pSrc1First, std::memory_order_release);
+			pDst->head.next.store(pSrc1First, std::memory_order_release);
 			return;
 		}
 
 		// search so that p is the last element of src0
-		AtomicSingleHead* pSrc0Last = pSrc0First;
+		RcuSlistHead* pSrc0Last = pSrc0First;
 		while (true)
 		{
-			AtomicSingleHead* pNext = pSrc0Last->next.load(std::memory_order_relaxed);
+			RcuSlistHead* pNext = pSrc0Last->next.load(std::memory_order_relaxed);
 			if (pNext == nullptr)
 				break;
 			pSrc0Last = pNext;
 		}
 
 		pSrc0Last->next.store(pSrc1First, std::memory_order_release);
-		pDst->next.store(pSrc0First, std::memory_order_release);
+		pDst->head.next.store(pSrc0First, std::memory_order_release);
 	}
 
-	size_t computeHashBucketId(AtomicSingleHead* p, size_t hashMask)
+	size_t computeHashBucketId(RcuSlistHead* p, size_t hashMask)
 	{
 		return YJ_CONTAINER_OF(p, RNode, head)->hash & hashMask;
 	}
 
 	// caller should make sure that pZipStart->next is not null
-	void unzipOneSegment(AtomicSingleHead* pZipStart, size_t hashMaskExpanded)
+	void unzipOneSegment(RcuSlist* pZipStart, size_t hashMaskExpanded)
 	{
 		// pZipStart.next points to an element whose next has a different expanded
 		// hash bucket
@@ -125,12 +125,12 @@ namespace
 		// seg1, next unzip to let
 		//  Y to point to first y in Seg3 will make these readers not reaching what
 		//  they want)
-		AtomicSingleHead* pJumpStart = pZipStart->next.load(std::memory_order_relaxed);
+		RcuSlistHead* pJumpStart = pZipStart->head.next.load(std::memory_order_relaxed);
 		assert(pJumpStart && "Caller should rule out");
 		assert(pJumpStart->next.load(std::memory_order_relaxed) && "caller should rule out");
 		size_t jumpStartHashBucketId = computeHashBucketId(pJumpStart, hashMaskExpanded);
-		AtomicSingleHead* pNextJumpStart = pJumpStart->next.load(std::memory_order_relaxed);
-		AtomicSingleHead* pNext;
+		RcuSlistHead* pNextJumpStart = pJumpStart->next.load(std::memory_order_relaxed);
+		RcuSlistHead* pNext;
 		assert(computeHashBucketId(pNextJumpStart, hashMaskExpanded) != jumpStartHashBucketId);
 		while (true)
 		{
@@ -145,7 +145,7 @@ namespace
 				break;	// zip target found
 			pNextJumpStart = pNext;
 		}
-		pZipStart->next.store(pNextJumpStart, std::memory_order_release);
+		pZipStart->head.next.store(pNextJumpStart, std::memory_order_release);
 		pJumpStart->next.store(pNext, std::memory_order_release);
 	}
 
@@ -158,9 +158,9 @@ namespace
 			size_t bucketDstId1,
 			size_t bucketIdMask)
 	{
-		AtomicSingleHead* pFirstDst0 = nullptr;
-		AtomicSingleHead* pFirstDst1 = nullptr;
-		for (auto p = pSrc->list.next.load(std::memory_order_relaxed); p != nullptr;
+		RcuSlistHead* pFirstDst0 = nullptr;
+		RcuSlistHead* pFirstDst1 = nullptr;
+		for (auto p = pSrc->list.head.next.load(std::memory_order_relaxed); p != nullptr;
 				 p = p->next.load(std::memory_order_relaxed))
 		{
 			auto bucketId = computeHashBucketId(p, bucketIdMask);
@@ -174,18 +174,18 @@ namespace
 			if (pFirstDst0 && pFirstDst1)
 				break;
 		}
-		pDst0->list.next.store(pFirstDst0, std::memory_order_release);
-		pDst1->list.next.store(pFirstDst1, std::memory_order_release);
+		pDst0->list.head.next.store(pFirstDst0, std::memory_order_release);
+		pDst1->list.head.next.store(pFirstDst1, std::memory_order_release);
 	}
 
 	// caller should make sure that pSrc->list.next is not null
 	bool findFirstUnzipPoint(RTableCore::Bucket* pSrc, size_t hashMask)
 	{
-		AtomicSingleHead* p = pSrc->list.next.load(std::memory_order_relaxed);
+		RcuSlistHead* p = pSrc->list.head.next.load(std::memory_order_relaxed);
 		size_t hashBucketInitial = computeHashBucketId(p, hashMask);
 		while (true)
 		{
-			AtomicSingleHead* pNext = p->next.load(std::memory_order_relaxed);
+			RcuSlistHead* pNext = p->next.load(std::memory_order_relaxed);
 			if (pNext == nullptr)
 			{
 				// no more unzip needed for current bucket
@@ -196,7 +196,7 @@ namespace
 				break;	// zip target found
 			p = pNext;
 		}
-		pSrc->list.next.store(p, std::memory_order_release);
+		pSrc->list.head.next.store(p, std::memory_order_release);
 		return p;
 	}
 
@@ -207,7 +207,7 @@ namespace
 		for (size_t iHalf = 0; iHalf < bucketsInfoOld->nrBucketsPowerOf2; ++iHalf)
 		{
 			RTableCore::Bucket* pSrc = bucketsInfoOld->pBuckets + iHalf;
-			if (pSrc->list.next.load(std::memory_order_relaxed) != nullptr)
+			if (pSrc->list.head.next.load(std::memory_order_relaxed) != nullptr)
 			{
 				bool needUnzip = findFirstUnzipPoint(pSrc, bucketMaskNew);
 				if (needUnzip)
@@ -228,7 +228,7 @@ namespace
 			for (size_t iHalf = 0; iHalf < bucketsInfoOld->nrBucketsPowerOf2; ++iHalf)
 			{
 				RTableCore::Bucket* pSrc = bucketsInfoOld->pBuckets + iHalf;
-				if (pSrc->list.next.load(std::memory_order_relaxed) != nullptr)
+				if (pSrc->list.head.next.load(std::memory_order_relaxed) != nullptr)
 				{
 					allFinished = false;
 					unzipOneSegment(&pSrc->list, bucketMaskNew);
@@ -328,8 +328,8 @@ void rTableCoreInsertNoExpand(RTableCore& table, RNode* pEntry)
 	auto bucketMask = pBucketsInfo->nrBucketsPowerOf2 - 1;
 	size_t bucketId = pEntry->hash & bucketMask;
 	RTableCore::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
-	pEntry->head.next.store(pBucket->list.next, std::memory_order_release);
-	pBucket->list.next.store(&pEntry->head, std::memory_order_release);
+	pEntry->head.next.store(pBucket->list.head.next, std::memory_order_release);
+	pBucket->list.head.next.store(&pEntry->head, std::memory_order_release);
 	table.size.fetch_add(1, std::memory_order_relaxed);
 }
 

@@ -1,5 +1,5 @@
 #pragma once
 namespace yrcu
 {
-    void rTableTests();
+void rTableTests();
 }

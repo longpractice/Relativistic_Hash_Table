@@ -2,5 +2,5 @@
 
 namespace yrcu
 {
-    void rcuTests();
+void rcuTests();
 }

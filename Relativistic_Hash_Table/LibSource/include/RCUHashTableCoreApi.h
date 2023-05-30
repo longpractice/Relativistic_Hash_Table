@@ -1,5 +1,5 @@
 #pragma once
-#include "AtomicSinglyLinkedListApi.h"
+#include "RcuSinglyLinkedListApi.h"
 #include "RCUApi.h"
 #include "RCUHashTableTypes.h"
 
@@ -43,9 +43,9 @@ RNode* rTableCoreTryDetachNoShrink(RTableCore& table, size_t hashVal, UnaryPredi
 	size_t bucketHash = pBucketsInfo->nrBucketsPowerOf2 - 1;
 	auto bucketId = hashVal & bucketHash;
 	RTableCore::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
-	auto predictInner = [&predict](const AtomicSingleHead* p)
+	auto predictInner = [&predict](const RcuSlistHead* p)
 	{ return predict(YJ_CONTAINER_OF(p, RNode, head)); };
-	AtomicSingleHead* pRemoved = atomicSlistRemoveIf(&pBucket->list, predictInner);
+	RcuSlistHead* pRemoved = rcuSlistRemoveIf(&pBucket->list, predictInner);
 	if (!pRemoved)
 		return nullptr;
 	return YJ_CONTAINER_OF(pRemoved, RNode, head);
@@ -92,9 +92,9 @@ bool rTableCoreTryInsertNoExpand(
 	size_t bucketMask = pBucketsInfo->nrBucketsPowerOf2 - 1;
 	auto bucketId = pEntry->hash & bucketMask;
 	RTableCore::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
-	auto binaryPredictInner = [&binaryPredict](const AtomicSingleHead* p1, const AtomicSingleHead* p2)
+	auto binaryPredictInner = [&binaryPredict](const RcuSlistHead* p1, const RcuSlistHead* p2)
 	{ return binaryPredict(YJ_CONTAINER_OF(p1, RNode, head), YJ_CONTAINER_OF(p2, RNode, head)); };
-	bool inserted = atomicSlistPrependIfNoMatch(&pBucket->list, &pEntry->head, binaryPredictInner);
+	bool inserted = rcuSlistPrependIfNoMatch(&pBucket->list, &pEntry->head, binaryPredictInner);
 	if (inserted)
 		table.size.fetch_add(1, std::memory_order_relaxed);
 	return inserted;
@@ -130,9 +130,9 @@ RNode* rTableCoreFind(const RTableCore& table, size_t hashVal, UnaryPrediction p
 	size_t bucketHash = pBucketsInfo->nrBucketsPowerOf2 - 1;
 	auto bucketId = hashVal & bucketHash;
 	RTableCore::Bucket* pBucket = pBucketsInfo->pBuckets + bucketId;
-	auto predictInner = [&predict](const AtomicSingleHead* p)
+	auto predictInner = [&predict](const RcuSlistHead* p)
 	{ return predict(YJ_CONTAINER_OF(p, RNode, head)); };
-	AtomicSingleHead* pFound = atomicSlistFindIf(&pBucket->list, predictInner);
+	RcuSlistHead* pFound = rcuSlistFindIf(&pBucket->list, predictInner);
 	if (!pFound)
 		return nullptr;
 	return YJ_CONTAINER_OF(pFound, RNode, head);

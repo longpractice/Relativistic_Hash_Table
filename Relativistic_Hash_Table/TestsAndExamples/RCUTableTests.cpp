@@ -1,3 +1,4 @@
+#include <cassert>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -6,12 +7,179 @@
 #include <vector>
 
 #include "RCUHashTableApi.h"
+#include "RcuDoublyLinkedListApi.h"
 #include "TestHelper.h"
 
 namespace yrcu
 {
 namespace
 {
+	struct RcuDlistTest
+	{
+		RcuDlist dlist;
+		struct MyElement
+		{
+			int value;
+			// to be linked by the hash table
+			RcuDlistHead entry;
+			bool valid;
+		};
+		std::vector<MyElement> myData{ 10000000 };
+
+		void clearAndVerify(bool reversely)
+		{
+			if (!reversely)
+				for (RcuDlistSafeIter it = rcuDlistSafeBegin(&dlist); !rcuDlistSafeIsEnd(it, &dlist);
+						 rcuDlistSafeAdvance(it))
+					rcuDlistSafeRemoveIt(it);
+			else
+				for (RcuDlistSafeRIter it = rcuDlistSafeRBegin(&dlist); !rcuDlistSafeRIsEnd(it, &dlist);
+						 rcuDlistSafeRAdvance(it))
+					rcuDlistSafeRRemoveIt(it);
+
+			if (!rcuDlistEmpty(&dlist))
+				throw std::exception("should be empty");
+		}
+
+		static void verifyElement(RcuDlistHead* pEntry, int& expected)
+		{
+			MyElement* pE = YJ_CONTAINER_OF(pEntry, MyElement, entry);
+			// writer might erase elements that is not multiples of 8
+			// but other elements should remain found
+			if (expected % 8 == 0)
+				if (pE->value != expected)
+					expected++;
+			if (expected % 8 == 1)
+				if (pE->value != expected)
+					expected++;
+			if (pE->value != expected)
+				throw std::exception("wrong value");
+			expected++;
+		}
+
+		void verify(bool reverseClear)
+		{
+			std::atomic<bool> finished = false;
+			auto& thisDlist = dlist;
+			auto& thisData = myData;
+			// reader thread looks up
+			auto readerFunc = [&thisData, &thisDlist, &finished]()
+			{
+				while (!finished)
+				{
+					int expected = 0;
+					for (RcuDlistIter it = rcuDlistBegin(&thisDlist); !rcuDlistIsEnd(it, &thisDlist);
+							 rcuDlistAdvance(it))
+						verifyElement(it.pos, expected);
+				}
+			};
+
+			// push reader threads
+			const auto nrThreads = std::thread::hardware_concurrency();
+			std::vector<std::future<void>> readerFutures{ nrThreads };
+			for (auto& f : readerFutures)
+				f = std::async(std::launch::async, readerFunc);
+
+			for (RcuDlistSafeIter it = rcuDlistSafeBegin(&dlist); !rcuDlistSafeIsEnd(it, &dlist);
+					 rcuDlistSafeAdvance(it))
+			{
+				MyElement* pE = YJ_CONTAINER_OF(it.pos, MyElement, entry);
+				// writer might erase elements that is not multiples of 8
+				// but other elements should remain found
+				if (auto res = (pE->value % 8); res == 0 || res == 1)
+					rcuDlistSafeRemoveIt(it);
+			}
+
+			finished = true;
+			for (auto& f : readerFutures)
+				f.get();
+
+			// this verification does not matter if it is reversed or not
+			clearAndVerify(reverseClear);
+		}
+
+		void verifyReversed(bool reverseClear)
+		{
+			std::atomic<bool> finished = false;
+			auto& thisDlist = dlist;
+			auto& thisData = myData;
+			// reader thread looks up
+			auto readerFunc = [&thisData, &thisDlist, &finished]()
+			{
+				while (!finished)
+				{
+					int expected = 0;
+					for (RcuDlistRIter it = rcuDlistRBegin(&thisDlist); !rcuDlistIsREnd(it, &thisDlist);
+							 rcuDlistRAdvance(it))
+						verifyElement(it.pos, expected);
+				}
+			};
+
+			// push reader threads
+			const auto nrThreads = std::thread::hardware_concurrency();
+			std::vector<std::future<void>> readerFutures{ nrThreads };
+			for (auto& f : readerFutures)
+				f = std::async(std::launch::async, readerFunc);
+
+			for (RcuDlistSafeRIter it = rcuDlistSafeRBegin(&dlist); !rcuDlistSafeRIsEnd(it, &dlist);
+					 rcuDlistSafeRAdvance(it))
+			{
+				MyElement* pE = YJ_CONTAINER_OF(it.pos, MyElement, entry);
+				// writer might erase elements that is not multiples of 8
+				// but other elements should remain found
+				if (auto res = (pE->value % 8); res == 0 || res == 1)
+					rcuDlistSafeRRemoveIt(it);
+			}
+
+			finished = true;
+			for (auto& f : readerFutures)
+				f.get();
+
+			clearAndVerify(reverseClear);
+		}
+
+		void runAppendTest()
+		{
+			for (auto& item : myData)
+				rcuDlistAppend(&dlist, &item.entry);
+			verify(true);
+
+			for (auto& item : myData)
+				rcuDlistAppend(&dlist, &item.entry);
+			verify(false);
+		}
+
+		void runPrependTest()
+		{
+			for (auto& item : myData)
+				rcuDlistPrepend(&dlist, &item.entry);
+			verifyReversed(true);
+
+			for (auto& item : myData)
+				rcuDlistPrepend(&dlist, &item.entry);
+			verifyReversed(false);
+		}
+
+		void run()
+		{
+			std::cout << "Start rcu Dlist test with " << myData.size() << " samples.\n";
+			rcuDlistInit(&dlist);
+
+			// user data to be tracked by the hash table
+
+			// insert all array elements into the hash table
+			for (auto item = 0; item < myData.size(); ++item)
+			{
+				myData[item].value = static_cast<int>(item);
+				myData[item].valid = true;
+			}
+
+			runAppendTest();
+			runPrependTest();
+			std::cout << "End rcu Dlist test. \n";
+		}
+	};
+
 	struct PerfComparisonWithStdUnorderedSet
 	{
 		static constexpr size_t c_nrElementsToLookUp = 2ull << 18;
@@ -442,6 +610,9 @@ namespace
 
 void rTableTests()
 {
+	RcuDlistTest dlistTest;
+	dlistTest.run();
+
 	RCUTableManualStressExpandShrink testManualShrinkExpand;
 	testManualShrinkExpand.run();
 

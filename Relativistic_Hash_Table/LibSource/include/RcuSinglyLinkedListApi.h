@@ -1,4 +1,4 @@
-#include "AtomicSinglyLinkedListTypes.h"
+#include "RcuSinglyLinkedListTypes.h"
 
 #define YJ_OFFSET_OF(Type, Field)					 __builtin_offsetof(Type, Field)
 #define YJ_CONTAINER_OF(ptr, type, member) ((type*)((char*)ptr - YJ_OFFSET_OF(type, member)))
@@ -6,7 +6,7 @@
 namespace yrcu
 {
 //*************** Atomic singly list **************//
-// Write operations (insert and erase) must be serialized, and the atomic singly
+// Write operations (insert and erase) must be serialized, and the std::atomic singly
 // linked list itself does not require any rcu synchronization.
 //
 // External RCU synchronization is only required if there are readers who wants
@@ -14,31 +14,45 @@ namespace yrcu
 // after the unlinking of element. If the erased (here it means that it is only
 // unlinked but not yet destroyed).
 
-inline void atomicSlistInit(AtomicSingleHead* list)
+inline void rcuSlistInit(RcuSlist* list)
 {
-	// no memory orders since initialization should never be executing in parallel
-	// with other apis
-	list->next.store(nullptr, std::memory_order_relaxed);
+	// Initializing a never initialized list would only require relaxed,
+   // since the previous value is random.
+	list->head.next.store(nullptr, std::memory_order_relaxed);
+}
+
+//previous value and newly initialized value diff might carry a release-acquire 
+//memory order, for example, one thread reset the list and another thread checks
+//of the list is empty.
+inline void rcuSlistReset(RcuSlist* list)
+{
+	list->head.next.store(nullptr, std::memory_order_release);
+}
+
+inline bool rcuSlistEmpty(RcuSlist* list)
+{
+	return list->head.next.load(std::memory_order_acquire) == nullptr;
 }
 
 // Write operation(must be serialized with other write operations)
-// link elem to the front of the list
-inline void atomicSlistPrepend(AtomicSingleHead* list, AtomicSingleHead* newElem)
+// add the new element right after pos, which could be a list or an element in the list
+inline void rcuSlistInsertAfter(RcuSlistHead* pos, RcuSlistHead* newElem)
 {
-	// Since writers are serialized, inside writing apis we load atomic with
+	// Since writers are serialized, inside writing apis we load std::atomic with
 	// mem-order-relaxed. But since there might be concurrent readers, inside
 	// writing apis we store with mem-order-release.
-	AtomicSingleHead* pNext = list->next.load(std::memory_order_relaxed);
+	RcuSlistHead* pNext = pos->next.load(std::memory_order_relaxed);
 	newElem->next.store(pNext, std::memory_order_release);
-	list->next.store(newElem, std::memory_order_release);
+	pos->next.store(newElem, std::memory_order_release);
 }
 
-// Append the element to the end of the list
-// Note that this will cause a traversal of the list
-inline void atomicSlistAppend(AtomicSingleHead* list, AtomicSingleHead* newElem)
+// Find the tail starting from pos and append the new element.
+// (Pos could be the list itself, and then this function just append the element to the
+// end of the list)
+inline void rcuSlistAppendToTail(RcuSlistHead* pos, RcuSlistHead* newElem)
 {
-	AtomicSingleHead* p = list;
-	AtomicSingleHead* pNext = p->next.load(std::memory_order_relaxed);
+	RcuSlistHead* p = pos;
+	RcuSlistHead* pNext = p->next.load(std::memory_order_relaxed);
 	while (pNext)
 	{
 		p = pNext;
@@ -56,23 +70,20 @@ inline void atomicSlistAppend(AtomicSingleHead* list, AtomicSingleHead* newElem)
 // since this function is serialized with other writers, we can relax some load operations
 // inside.
 template<typename BinaryPredict>
-inline bool atomicSlistPrependIfNoMatch(
-		AtomicSingleHead* list,
-		AtomicSingleHead* newElem,
-		BinaryPredict binaryPredict)
+inline bool
+rcuSlistPrependIfNoMatch(RcuSlist* list, RcuSlistHead* newElem, BinaryPredict binaryPredict)
 {
-	AtomicSingleHead* pFirst = list->next.load(std::memory_order_relaxed);
-	AtomicSingleHead* p;
+	RcuSlistHead* pFirst = list->head.next.load(std::memory_order_relaxed);
+	RcuSlistHead* p;
 	for (p = pFirst; p != nullptr; p = p->next.load(std::memory_order_relaxed))
 		if (binaryPredict(p, newElem))
 			return false;
 	// put the new element in the front
 	// order of the lines below matters since there might be concurrent readers
 	newElem->next.store(pFirst, std::memory_order_release);
-	list->next.store(newElem, std::memory_order_release);
+	list->head.next.store(newElem, std::memory_order_release);
 	return true;
 }
-
 
 // Write operation(must be serialized with other write operations)
 // Append the element to the end of the list, if the element is not found from list.
@@ -80,13 +91,11 @@ inline bool atomicSlistPrependIfNoMatch(
 // since this function is serialized with other writers, we can relax some load operations
 // inside.
 template<typename BinaryPredict>
-inline bool atomicSlistAppendIfNoMatch(
-		AtomicSingleHead* list,
-		AtomicSingleHead* newElem,
-		BinaryPredict binaryPredict)
+inline bool
+rcuSlistAppendIfNoMatch(RcuSlist* list, RcuSlistHead* newElem, BinaryPredict binaryPredict)
 {
-	AtomicSingleHead* p = list;
-	AtomicSingleHead* pNext = p->next.load(std::memory_order_relaxed);
+	RcuSlistHead* p = &list->head;
+	RcuSlistHead* pNext = p->next.load(std::memory_order_relaxed);
 
 	while (pNext)
 	{
@@ -95,19 +104,19 @@ inline bool atomicSlistAppendIfNoMatch(
 		p = pNext;
 		pNext = p->next.load(std::memory_order_relaxed);
 	}
-	//order of lines below matters, due to concurrent readers
+	// order of lines below matters, due to concurrent readers
 	newElem->next.store(nullptr, std::memory_order_release);
 	p->next.store(newElem, std::memory_order_release);
 	return true;
 }
 
-// Find first element that predict(AtomicSingleHead*) returns true.
-// UnaryPredict is of signature `bool(AtomicSingleHead*)`.
+// Find first element that predict(RcuSlistHead*) returns true.
+// UnaryPredict is of signature `bool(RcuSlistHead*)`.
 // If none is find, nullptr is returned
 template<typename UnaryPredict>
-AtomicSingleHead* atomicSlistFindIf(AtomicSingleHead* list, UnaryPredict predict)
+RcuSlistHead* rcuSlistFindIf(RcuSlist* list, UnaryPredict predict)
 {
-	for (AtomicSingleHead* p = list->next.load(std::memory_order_acquire); p != nullptr;
+	for (RcuSlistHead* p = list->head.next.load(std::memory_order_acquire); p != nullptr;
 			 p = p->next.load(std::memory_order_acquire))
 		if (predict(p))
 			return p;
@@ -116,13 +125,13 @@ AtomicSingleHead* atomicSlistFindIf(AtomicSingleHead* list, UnaryPredict predict
 
 // Try find the first element that matches the predict and unlink it from the list
 // Note that since there might be concurrent readers going on,
-// the caller needs to wait for all the readers to expire before touching returned head's next member
-// or dispose it.
+// the caller needs to wait for all the readers to expire before touching returned head's next
+// member or dispose it.
 template<typename UnaryPredict>
-AtomicSingleHead* atomicSlistRemoveIf(AtomicSingleHead* list, UnaryPredict predict)
+RcuSlistHead* rcuSlistRemoveIf(RcuSlist* list, UnaryPredict predict)
 {
-	AtomicSingleHead* pLast = list;
-	AtomicSingleHead* p = pLast->next.load(std::memory_order_relaxed);
+	RcuSlistHead* pLast = &list->head;
+	RcuSlistHead* p = pLast->next.load(std::memory_order_relaxed);
 	while (p)
 	{
 		if (predict(p))
@@ -138,10 +147,10 @@ AtomicSingleHead* atomicSlistRemoveIf(AtomicSingleHead* list, UnaryPredict predi
 
 // Head will be returned if it exists in the list
 // Otherwise, nullptr is returned
-inline AtomicSingleHead* atomicSlistRemove(AtomicSingleHead* list, AtomicSingleHead* head)
+inline RcuSlistHead* rcuSlistRemove(RcuSlist* list, RcuSlistHead* head)
 {
-	AtomicSingleHead* pLast = list;
-	AtomicSingleHead* p = pLast->next.load(std::memory_order_relaxed);
+	RcuSlistHead* pLast = &list->head;
+	RcuSlistHead* p = pLast->next.load(std::memory_order_relaxed);
 
 	while (p)
 	{
